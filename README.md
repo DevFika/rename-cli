@@ -30,6 +30,7 @@ rename-cli is a versatile command-line tool for renaming files in bulk. It suppo
 | `--suffix`            | Add a suffix before the file extension.                                                           | `--suffix "_v2"`                                    |
 | `-R, --recursive`     | Recursively rename files in subdirectories (if target is a directory).                            | `-R`                                                |
 | `--ext`               | Only rename files with specific extensions. Can be used multiple times.                            | `--ext .txt --ext .jpg`                             |
+| `--ext-replace`       | Replace file extensions. Replaces `old` with `new`.                                           | `--ext-replace old_ext new_ext`                             |
 | `--preview`           | Preview the changes without renaming the files.                                                   | `--preview`                                         |
 | `--verbose`           | Display detailed information about each renaming operation.                                       | `--verbose`                                         |
 | `--confirm`           | Prompt for confirmation before renaming each file.                                                | `--confirm`                                         |
