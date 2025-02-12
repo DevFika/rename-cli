@@ -77,13 +77,107 @@ def clean_filename(name):
     return name
 
 
-def regex_replace_in_filenames(path, pattern, replacement):
-    new_name = re.sub(pattern, replacement, path.name)
-    if new_name != path.name:
-        new_path = path.with_name(new_name)
-        print(f"Renaming {path.name} to {new_name}")
-        return new_path
-    return path
+def camel_case_to_snake_case(name):
+    """Remove unwanted characters (e.g., spaces, extra underscores)."""
+    new_name = re.sub(r'([a-z])([A-Z])', '\1_\2', name)
+    if new_name != name:
+        return new_name
+    return name
+
+def snake_case_to_camel_case(name):
+    """Convert snake_case to CamelCase."""
+    new_name = re.sub(r'_([a-z])', lambda match: match.group(1).upper(), name)
+    return new_name.capitalize() if new_name else name
+
+def remove_leading_zeros(name):
+    new_name = re.sub(r'\b0+(\d+)', '\1', name)
+    if new_name != name:
+        return new_name
+    return name
+
+def to_uppercase(name):
+    """Convert filename to uppercase."""
+    base_name, ext = os.path.splitext(name)
+    return base_name.upper() + ext
+
+def to_uppercase_all(name):
+    """Convert filename to uppercase."""
+    return name.upper()
+
+def to_lowercase(name):
+    """Convert filename to lowercase."""
+    base_name, ext = os.path.splitext(name)
+    return base_name.lower() + ext
+
+def to_lowercase_all(name):
+    """Convert filename to lowercase."""
+    return name.lower()
+
+def remove_numbers(name):
+    """Remove all digits from the filename."""
+    return re.sub(r'\d+', '', name)
+
+def standardize_dates(name):
+    """Convert dates like DD-MM-YYYY or MM-DD-YYYY to YYYY-MM-DD."""
+    new_name = re.sub(r'(\b\d{1,2})[-_/](\d{1,2})[-_/](\d{4})', r'\3-\1-\2', name)
+    return new_name
+
+def trim_filename(name):
+    """Remove leading and trailing spaces."""
+    return name.strip()
+
+def replace_spaces_with_underscores(name):
+    """Replace spaces with underscores."""
+    new_name = re.sub(r'\s+', '_', name)
+    return new_name
+
+def remove_special_characters(name):
+    """Remove all characters except letters, numbers, dots, and underscores."""
+    new_name = re.sub(r'[^a-zA-Z0-9._]', '', name)
+    return new_name
+
+def regex_replace_in_filenames(name, pattern, replacement):
+    new_name = re.sub(pattern, replacement, name)
+    if new_name != name:
+        return new_name
+    return name
+
+def process_filename(name, arg, values):
+    """Apply selected transformations."""
+    if arg == "camel_to_snake":
+        name = camel_case_to_snake_case(name)
+    elif arg == "snake_to_camel":
+        name = snake_case_to_camel_case(name)
+    elif arg == "remove_zeros":
+        name = remove_leading_zeros(name)
+    elif arg == "uppercase":
+        name = to_uppercase(name)
+    elif arg == "lowercase":
+        name = to_lowercase(name)
+    elif arg == "remove_numbers":
+        name = remove_numbers(name)
+    elif arg == "standardize_dates":
+        name = standardize_dates(name)
+    elif arg == "trim":
+        name = trim_filename(name)
+    elif arg == "replace_spaces":
+        name = replace_spaces_with_underscores(name)
+    elif arg == "remove_special":
+        name = remove_special_characters(name)
+
+    elif arg == "clean":
+        name = clean_filename(name)
+    elif arg == "replace":
+        name = name.replace(values[0], values[1])
+    elif arg == "ext_replace":
+        if name.endswith(values[0]):
+            name = name.replace(values[0], values[1])
+    elif arg == "prefix":
+        name = values + name
+    elif arg == "suffix":
+        name = f"{Path(name).stem}{values}{Path(name).suffix}"
+
+    return name
 
 class ReplaceAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -135,22 +229,7 @@ def rename_file(path, args, target_path):
     log = True
 
     for arg, values in actions:
-        if arg == "clean":
-            if log: print("Doing clean")
-            new_name = clean_filename(new_name)
-        elif arg == "replace":
-            if log: print("Doing Replace")
-            new_name = new_name.replace(values[0], values[1])
-        elif arg == "ext_replace":
-            if log: print("Doing extension Replace")
-            if new_name.endswith(values[0]):
-                new_name = new_name.replace(values[0], values[1])
-        elif arg == "prefix":
-            if log: print("Doing prefix")
-            new_name = values + new_name
-        elif arg == "suffix":
-            if log: print("Doing suffix")
-            new_name = f"{Path(new_name).stem}{values}{Path(new_name).suffix}"
+        new_name = process_filename(new_name, arg, values)
 
     if new_name == path.name:
         if verbose:
@@ -160,15 +239,19 @@ def rename_file(path, args, target_path):
     new_path = path.with_name(new_name)
 
     # Prevent overwriting existing files
-    if new_path.exists():
-        print(f"⚠️  Skipping (target exists): {path} -> {new_path}")
-        return
+    # if any(f.lower() == new_path.name.lower() for f in os.listdir(new_path.parent)):
+    # if new_path.name.lower() == new_path.name.lower() and path.name != new_path.name:
+    # if new_path.exists():
+        # print(f"⚠️  Skipping (target exists): {path} -> {new_path}")
+        # return
 
     relative_path = path.relative_to(target_path)
     relative_new_name = new_path.relative_to(target_path)
 
     rename_text = "Renaming" if not preview else "Preview"
-    print(f"{rename_text}: {ORIGINAL_COLOR}{relative_path}{END_COLOR} -> {PENDING_COLOR}{relative_new_name}{END_COLOR}")
+
+    highlighted_original, highlighted_new = highlight_changes(relative_path.name, relative_new_name.name)
+    print(f"{rename_text}: {highlighted_original} -> {highlighted_new}")
 
     if not preview:
         try:
@@ -238,7 +321,7 @@ def interactive_rename(path, args, target_path, extensions):
     # Loop until the user confirms the rename or exits for all files
     while True:
         try:
-            clear_terminal()
+            # clear_terminal()
             # Show the current preview of the filenames
             for file, names in files_to_process.items():
                 original_name = f"{names['original_name']}"
@@ -264,9 +347,7 @@ def interactive_rename(path, args, target_path, extensions):
             
             if args.undo:
                 if history:
-                    print(history)
                     last_snapshot = history.pop()
-                    print(last_snapshot)
                     for file, old_name in last_snapshot.items():
                         files_to_process[file]['new_name'] = old_name
                 else:
@@ -313,6 +394,12 @@ def interactive_rename(path, args, target_path, extensions):
                         old, new = values[0], values[1]
                         for file, names in files_to_process.items():
                             names['new_name'] = names['new_name'].replace(old, new)
+                    elif arg == "regex_replace":
+                        if log: print("Doing Regex Replace")
+                        print(values)
+                        pattern, replacement = values[0], values[1]
+                        for file, names in files_to_process.items():
+                            names['new_name'] = regex_replace_in_filenames(names['new_name'], pattern, replacement)
                     elif arg == "ext_replace":
                         if log: print("Doing extension Replace")
                         old_ext, new_ext = values[0], values[1]
@@ -357,7 +444,7 @@ def create_parser(interactive_mode: bool = False):
     parser.add_argument("--preview", action="store_true", help="Preview changes without renaming files.")
     parser.add_argument("--verbose", action="store_true", help="Display detailed renaming information.")
     parser.add_argument("--confirm", action="store_true", help="Prompt for confirmation before renaming each file.")
-    parser.add_argument("--regex-replace", nargs=2, metavar=("pattern", "replacement"), help="Use regex to replace a pattern in filenames.")
+    parser.add_argument("--regex-replace", action=ReplaceAction, nargs='+', help="Use regex to replace a pattern in filenames.")
     parser.add_argument("--clean", nargs=0, action=OrderedAction, help="Remove unwanted characters (e.g., spaces, extra underscores).")
     if not interactive_mode:
         parser.add_argument("--interactive", action="store_true", help="Enable interactive renaming mode.")
@@ -365,7 +452,20 @@ def create_parser(interactive_mode: bool = False):
         parser.add_argument("--exit", action="store_true", help="Exit interactive mode.")
         parser.add_argument("--apply", action="store_true", help="Apply changes in interactive mode.")
         parser.add_argument("--undo", action="store_true", help="Undo the last change in interactive mode.")
+    
+    parser.add_argument("--camel-to-snake", nargs=0, action=OrderedAction, help="Convert CamelCase to snake_case")
+    parser.add_argument("--snake-to-camel", nargs=0, action=OrderedAction, help="Convert snake_case to CamelCase")
+    parser.add_argument("--remove-zeros", nargs=0, action=OrderedAction, help="Remove leading zeros from numbers")
+    parser.add_argument("--uppercase", nargs=0, action=OrderedAction, help="Convert filename to uppercase")
+    parser.add_argument("--lowercase", nargs=0, action=OrderedAction, help="Convert filename to lowercase")
+    parser.add_argument("--remove-numbers", nargs=0, action=OrderedAction, help="Remove all digits from the filename")
+    parser.add_argument("--standardize-dates", nargs=0, action=OrderedAction, help="Convert dates like DD-MM-YYYY to YYYY-MM-DD")
+    parser.add_argument("--trim", nargs=0, action=OrderedAction, help="Trim leading and trailing spaces")
+    parser.add_argument("--replace-spaces", nargs=0, action=OrderedAction, help="Replace spaces with underscores")
+    parser.add_argument("--remove-special", nargs=0, action=OrderedAction, help="Remove special characters except letters, numbers, dots, and underscores")
     return parser
+
+
 
 def main():
     parser = create_parser()
