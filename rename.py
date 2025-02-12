@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 import sys
+import re
 
 
 RED = "\033[91m"
@@ -13,6 +14,26 @@ def extension_type(value):
     if not value.startswith('.'):
         raise argparse.ArgumentTypeError(f"Extension must start with a dot (e.g., '.txt').")
     return value.lower()
+
+
+def clean_filename(path):
+    """Remove unwanted characters (e.g., spaces, extra underscores)."""
+    new_name = re.sub(r'[_\s]+', '_', path.name)  # Replace multiple spaces or underscores with a single underscore
+    new_name = re.sub(r'[^a-zA-Z0-9._-]', '', new_name)  # Remove non-alphanumeric characters
+    if new_name != path.name:
+        new_path = path.with_name(new_name)
+        # print(f"Renaming {path.name} to {new_name}")
+        return new_name
+    return path.name
+
+
+def regex_replace_in_filenames(path, pattern, replacement):
+    new_name = re.sub(pattern, replacement, path.name)
+    if new_name != path.name:
+        new_path = path.with_name(new_name)
+        print(f"Renaming {path.name} to {new_name}")
+        return new_path
+    return path
 
 
 class ReplaceAction(argparse.Action):
@@ -38,13 +59,23 @@ def confirm_rename(old_name, new_name):
     return True
 
 
-def rename_file(path, replacements, prefix, suffix, preview, verbose, confirm, target_path, ext_replace):
+def rename_file(path, replacements, args, target_path, ext_replace):
     """Renames a single file based on user-defined rules."""
     if not path.is_file():
         print(f"❌ Error: {path} is not a valid file.", file=sys.stderr)
         return
     
+    prefix = args.prefix
+    suffix = args.suffix
+    preview = args.preview
+    verbose = args.verbose
+    confirm = args.confirm
+    clean = args.clean
+    
     new_name = path.name
+
+    if clean:
+        new_name = clean_filename(path)
 
     # Apply text replacements
     if replacements:
@@ -100,13 +131,20 @@ def rename_file(path, replacements, prefix, suffix, preview, verbose, confirm, t
             print(f"❌ Error renaming {path}: {e}", file=sys.stderr)
 
 
-def rename_files(directory, replacements, prefix, suffix, recursive, extensions, preview, verbose, confirm, target_path, ext_replace):
+def rename_files(directory, replacements, args, extensions, target_path, ext_replace):
     """Renames multiple files in a directory based on user-defined rules and filters."""
     directory = Path(directory).resolve()
 
     if not directory.is_dir():
         print(f"❌ Error: {directory} is not a valid directory.", file=sys.stderr)
         return
+    
+    prefix = args.prefix
+    suffix = args.suffix
+    preview = args.preview
+    verbose = args.verbose
+    confirm = args.confirm
+    recursive = args.recursive
 
     files = directory.rglob("*") if recursive else directory.glob("*")
 
@@ -118,7 +156,7 @@ def rename_files(directory, replacements, prefix, suffix, recursive, extensions,
                     print(f"⚠️ Skipping: {path} (does not match specified extensions: {extensions})", file=sys.stderr)
                 continue  # Skip files that don"t match the given extensions
             
-            rename_file(path, replacements, prefix, suffix, preview, verbose, confirm, target_path, ext_replace)
+            rename_file(path, replacements, args, target_path, ext_replace)
 
 
 def main():
@@ -134,6 +172,8 @@ def main():
     parser.add_argument("--preview", action="store_true", help="Preview changes without renaming files.")
     parser.add_argument("--verbose", action="store_true", help="Display detailed renaming information.")
     parser.add_argument("--confirm", action="store_true", help="Prompt for confirmation before renaming each file.")
+    parser.add_argument("--regex-replace", nargs=2, metavar=("pattern", "replacement"), help="Use regex to replace a pattern in filenames.")
+    parser.add_argument("--clean", action="store_true", help="Remove unwanted characters (e.g., spaces, extra underscores).")
 
 
     args = parser.parse_args()
@@ -151,10 +191,10 @@ def main():
             print(f"⚠️ Skipping {target_path} (does not match specified extensions: {extensions})")
             return
         
-        rename_file(target_path, replacements, args.prefix, args.suffix, args.preview, args.verbose, args.confirm, target_path, ext_replace)
+        rename_file(target_path, replacements, args, target_path, ext_replace)
     elif target_path.is_dir():
         # Directory mode
-        rename_files(target_path, replacements, args.prefix, args.suffix, args.recursive, extensions, args.preview, args.verbose, args.confirm, target_path, ext_replace)
+        rename_files(target_path, replacements, args, extensions, target_path, ext_replace)
     else:
         print(f"❌ Error: {args.target} is not a valid file or directory.", file=sys.stderr)
         sys.exit(1)
