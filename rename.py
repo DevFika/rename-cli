@@ -72,8 +72,12 @@ def rename_file(path, replacements, args, target_path, ext_replace):
     clean = args.clean
     
     new_name = path.name
+
+
     replacements_copy = replacements.copy()
     ext_replace_copy = ext_replace.copy()
+
+    
 
     log = False
     for i, arg in enumerate(sys.argv[1:]):
@@ -86,7 +90,7 @@ def rename_file(path, replacements, args, target_path, ext_replace):
             new_name = new_name.replace(old, new)
         elif arg == "--ext-replace":
             if log: print("Doing extension Replace")
-            old_ext, new_ext = ext_replace_copy
+            old_ext, new_ext = ext_replace_copy.pop(0)
             if new_name.endswith(old_ext):
                 new_name = new_name.replace(old_ext, new_ext)
         elif arg == "--prefix":
@@ -95,26 +99,6 @@ def rename_file(path, replacements, args, target_path, ext_replace):
         elif arg == "--suffix":
             if log: print("Doing suffix")
             new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
-
-    # if clean:
-    #     new_name = clean_filename(path)
-
-    # Apply text replacements
-    # if replacements:
-    #     for old, new in replacements:
-    #         new_name = new_name.replace(old, new)
-
-    # if ext_replace:
-    #     old_ext, new_ext = ext_replace
-    #     if new_name.endswith(old_ext):
-    #         new_name = new_name.replace(old_ext, new_ext)
-
-
-    # Apply prefix and suffix
-    # if prefix:
-    #     new_name = prefix + new_name
-    # if suffix:
-    #     new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
 
     if new_name == path.name:
         if verbose:
@@ -180,46 +164,184 @@ def rename_files(directory, replacements, args, extensions, target_path, ext_rep
             
             rename_file(path, replacements, args, target_path, ext_replace)
 
+def interactive_rename(path, replacements, args, target_path, ext_replace, extensions):
+    """Interactive renaming of files in a directory."""
+    # Get the list of files to process
+    files_to_process = {}
 
-def main():
+    # If the target is a file, add it to the dictionary
+    if path.is_file():
+        if extensions and path.suffix.lower() not in extensions:
+            return
+        files_to_process[path] = {'original_name': path.name, 'new_name': path.name}
+    # If the target is a directory, get all files in the directory
+    elif path.is_dir():
+        files = target_path.rglob("*") if args.recursive else target_path.glob("*")
+        for file in files:
+            if file.is_file():
+                if extensions and file.suffix.lower() not in extensions:
+                    continue
+                files_to_process[file] = {'original_name': file.name, 'new_name': file.name}
+
+    # Loop until the user confirms the rename or exits for all files
+    while True:
+        # Show the current preview of the filenames
+        for file, names in files_to_process.items():
+            print(f"Preview: {names['original_name']} -> {names['new_name']}")
+
+        # Ask the user to input a command or apply the changes
+        print("y to appply, n to quit")
+        user_input = input("Interactive Mode:  ").strip()
+        parser = create_parser()
+
+        args = parser.parse_args(user_input.split())
+        replacements = getattr(args, 'replace', [])
+        replacements = [] if replacements is None else replacements
+        ext_replace = getattr(args, 'ext_replace', [])
+        ext_replace = [] if ext_replace is None else ext_replace
+        extensions = {ext.lower() for ext in args.ext} if args.ext else None
+
+        replacements_copy = replacements.copy()
+        ext_replace_copy = ext_replace.copy()
+
+        prefix = args.prefix
+        suffix = args.suffix
+        preview = args.preview
+        verbose = args.verbose
+        confirm = args.confirm
+        clean = args.clean
+
+        if user_input.lower() == 'y':
+            # User confirmed the rename for all files
+            for file, names in files_to_process.items():
+                file.rename(file.with_name(names['new_name']))  # Apply the name change
+            print(f"Renamed files successfully.")
+            break  # Break the loop and exit the interactive mode
+        elif user_input.lower() == 'n':
+            # User skipped the rename for all files
+            print("Skipped renaming files.")
+            break  # Break the loop and exit the interactive mode
+        elif user_input.lower() == "quit":
+            # Exit the interactive mode entirely
+            print("Exiting interactive mode.")
+            sys.exit(1)
+        
+        else:
+            for i, arg in enumerate(sys.argv[:]):
+                print(arg)
+                if arg == "--clean":
+                    for file, names in files_to_process.items():
+                        names['new_name'] = clean_filename(names['new_name'])
+                elif arg == "--replace" and replacements_copy:
+                    old, new = replacements_copy.pop(0)
+                    for file, names in files_to_process.items():
+                        names['new_name'] = names['new_name'].replace(old, new)
+                elif arg == "--ext-replace":
+                    old_ext, new_ext = ext_replace_copy.pop(0)
+                    for file, names in files_to_process.items():
+                        if names['new_name'].endswith(old_ext):
+                            names['new_name'] = names['new_name'].replace(old_ext, new_ext)
+                elif arg == "--prefix":
+                    for file, names in files_to_process.items():
+                        names['new_name'] = prefix + names['new_name']
+                elif arg == "--suffix":
+                    for file, names in files_to_process.items():
+                        names['new_name'] = f"{Path(names['new_name']).stem}{suffix}{file.suffix}"
+
+
+            # Handle the input command and apply changes progressively to all files
+            # if user_input.startswith('--prefix'):
+            #     # Extract prefix argument
+            #     prefix = user_input.split(' ', 1)[1].strip()
+            #     for file, names in files_to_process.items():
+            #         names['new_name'] = prefix + names['new_name']
+
+            # elif user_input.startswith('--replace'):
+            #     # Extract replacement arguments
+            #     parts = user_input.split(' ', 2)
+            #     if len(parts) == 3:
+            #         old, new = parts[1], parts[2]
+            #         for file, names in files_to_process.items():
+            #             names['new_name'] = names['new_name'].replace(old, new)
+
+            # elif user_input.startswith('--suffix'):
+            #     # Extract suffix argument
+            #     suffix = user_input.split(' ', 1)[1].strip()
+            #     for file, names in files_to_process.items():
+            #         names['new_name'] = f"{Path(names['new_name']).stem}{suffix}{file.suffix}"
+
+            # elif user_input.startswith('--clean'):
+            #     # Apply clean filename operation to all files
+            #     for file, names in files_to_process.items():
+            #         names['new_name'] = clean_filename(names['new_name'])
+
+            # elif user_input.startswith('--ext-replace'):
+            #     # Apply extension replacement to all files
+            #     if ext_replace:
+            #         old_ext, new_ext = ext_replace[0]
+            #         for file, names in files_to_process.items():
+            #             if names['new_name'].endswith(old_ext):
+            #                 names['new_name'] = names['new_name'].replace(old_ext, new_ext)
+
+            # else:
+            #     print("Invalid command. Please enter a valid command or 'y' to apply or 'n' to skip.")
+
+        # Show the updated previews after each command
+        print("\nUpdated Previews:")
+        for file, names in files_to_process.items():
+            print(f"{names['new_name']}")
+
+def create_parser():
+    """Create and return the argument parser."""
     parser = argparse.ArgumentParser(description="Batch rename files.")
 
-    parser.add_argument("-t", "--target", type=str, required=True, help="File or directory to rename. Use '.' for the current directory.")
-    parser.add_argument("-r", "--replace", action=ReplaceAction, nargs='+', help="Replace old text with new text in filenames.")
+    # Add command-line arguments
+    parser.add_argument("-T", "--target", type=str, required=True, help="File or directory to rename. Use '.' for the current directory.")
+    parser.add_argument("--replace", action=ReplaceAction, nargs='+', help="Replace old text with new text in filenames.")
     parser.add_argument("--prefix", type=str, help="Add this prefix to filenames.")
     parser.add_argument("--suffix", type=str, help="Add this suffix to filenames before the extension.")
     parser.add_argument("-R", "--recursive", action="store_true", help="Recursively rename files in subdirectories (if target is a directory).")
     parser.add_argument("--ext", action="append", type=extension_type, help="Only rename files with these extensions (e.g., --ext .txt --ext .jpg).")
-    parser.add_argument("--ext-replace", nargs=2, metavar=("old_extension", "new_extension"), help="Replace file extensions (e.g., .txt .md).")
+    parser.add_argument("--ext-replace", nargs='+', action=ReplaceAction, help="Replace file extensions (e.g., .txt .md).")
     parser.add_argument("--preview", action="store_true", help="Preview changes without renaming files.")
     parser.add_argument("--verbose", action="store_true", help="Display detailed renaming information.")
     parser.add_argument("--confirm", action="store_true", help="Prompt for confirmation before renaming each file.")
     parser.add_argument("--regex-replace", nargs=2, metavar=("pattern", "replacement"), help="Use regex to replace a pattern in filenames.")
     parser.add_argument("--clean", action="store_true", help="Remove unwanted characters (e.g., spaces, extra underscores).")
+    parser.add_argument("--interactive", action="store_true", help="Enable interactive renaming mode.")
 
+    return parser
+
+def main():
+    parser = create_parser()
 
     args = parser.parse_args()
     replacements = getattr(args, 'replace', [])
-    ext_replace = args.ext_replace if args.ext_replace else None
-
+    replacements = [] if replacements is None else replacements
+    ext_replace = getattr(args, 'ext_replace', [])
+    ext_replace = [] if ext_replace is None else ext_replace
     extensions = {ext.lower() for ext in args.ext} if args.ext else None
 
 
     target_path = Path(args.target).resolve()
 
-    if target_path.is_file():
-        # Single file mode
-        if extensions and target_path.suffix.lower() not in extensions:
-            print(f"⚠️ Skipping {target_path} (does not match specified extensions: {extensions})")
-            return
-        
-        rename_file(target_path, replacements, args, target_path, ext_replace)
-    elif target_path.is_dir():
-        # Directory mode
-        rename_files(target_path, replacements, args, extensions, target_path, ext_replace)
+    if args.interactive:
+        interactive_rename(target_path, replacements, args, target_path, ext_replace, extensions)
+        #     sys.exit(1)
     else:
-        print(f"❌ Error: {args.target} is not a valid file or directory.", file=sys.stderr)
-        sys.exit(1)
+        if target_path.is_file():
+            # Single file mode
+            if extensions and target_path.suffix.lower() not in extensions:
+                print(f"⚠️ Skipping {target_path} (does not match specified extensions: {extensions})")
+                return
+            
+            rename_file(target_path, replacements, args, target_path, ext_replace)
+        elif target_path.is_dir():
+            # Directory mode
+            rename_files(target_path, replacements, args, extensions, target_path, ext_replace)
+        else:
+            print(f"❌ Error: {args.target} is not a valid file or directory.", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
