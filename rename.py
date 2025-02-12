@@ -48,7 +48,7 @@ def highlight_changes(original, new):
         if tag == "equal":
             # Keep unchanged text normal in both original and new name
             highlighted_original += original[i1:i2]
-            highlighted_new += new[j1:j2]
+            highlighted_new += f"{LIGHT_GRAY}{new[j1:j2]}{END}"
         elif tag == "replace" or tag == "insert":
             # Highlight new/inserted text in new name
             highlighted_new += f"{PENDING_HIGHLIGHT_COLOR}{new[j1:j2]}{END}"
@@ -76,7 +76,6 @@ def clean_filename(name):
         return new_name
     return name
 
-
 def camel_case_to_snake_case(name):
     """Remove unwanted characters (e.g., spaces, extra underscores)."""
     new_name = re.sub(r'([a-z])([A-Z])', '\1_\2', name)
@@ -95,6 +94,11 @@ def remove_leading_zeros(name):
         return new_name
     return name
 
+def add_leading_zeros_to_number(name, total_digits=2):
+    """Add leading zeros to numbers in the filename to ensure consistent digit length."""
+    new_name = re.sub(r'(\d+)', lambda match: match.group(0).zfill(total_digits), name)
+    return new_name
+
 def to_uppercase(name):
     """Convert filename to uppercase."""
     base_name, ext = os.path.splitext(name)
@@ -112,6 +116,10 @@ def to_lowercase(name):
 def to_lowercase_all(name):
     """Convert filename to lowercase."""
     return name.lower()
+
+def to_title_case(name):
+    """Convert filename to title case (capitalize each word)."""
+    return ' '.join(word.capitalize() for word in name.split(' '))
 
 def remove_numbers(name):
     """Remove all digits from the filename."""
@@ -136,6 +144,25 @@ def remove_special_characters(name):
     new_name = re.sub(r'[^a-zA-Z0-9._]', '', name)
     return new_name
 
+def shorten_filename(name, max_length=255):
+    """Shorten the filename to fit within the max length, preserving the extension."""
+    base_name, ext = os.path.splitext(name)
+    if len(base_name) + len(ext) > max_length:
+        base_name = base_name[:max_length - len(ext)]  # Truncate the base name
+    return f"{base_name}{ext}"
+
+def remove_non_ascii(name):
+    """Remove all non-ASCII characters from the filename."""
+    return ''.join([char for char in name if ord(char) < 128])
+
+from datetime import datetime
+
+def add_timestamp(name):
+    """Append a timestamp to the filename."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    name_stem, ext = os.path.splitext(name)
+    return f"{name_stem}_{timestamp}{ext}"
+
 def regex_replace_in_filenames(name, pattern, replacement):
     new_name = re.sub(pattern, replacement, name)
     if new_name != name:
@@ -150,6 +177,8 @@ def process_filename(name, arg, values):
         name = snake_case_to_camel_case(name)
     elif arg == "remove_zeros":
         name = remove_leading_zeros(name)
+    elif arg == "add_leading_zeros":
+        name = add_leading_zeros_to_number(name, values[0])
     elif arg == "uppercase":
         name = to_uppercase(name)
     elif arg == "lowercase":
@@ -164,6 +193,12 @@ def process_filename(name, arg, values):
         name = replace_spaces_with_underscores(name)
     elif arg == "remove_special":
         name = remove_special_characters(name)
+    elif arg == "remove_non_ascii":
+        name = remove_non_ascii(name)
+    elif arg == "add_timestamp":
+        name = add_timestamp(name)
+    elif arg == "to_title_case":
+        name = to_title_case(name)
 
     elif arg == "clean":
         name = clean_filename(name)
@@ -376,45 +411,15 @@ def interactive_rename(path, args, target_path, extensions):
                 print("Exiting interactive mode.")
                 break
 
-            
-            
             else:
                 current_snapshot: dict = {file: names['new_name'] for file, names in files_to_process.items()}
                 history.append(current_snapshot)
 
                 actions = args.ordered_args if hasattr(args, 'ordered_args') else []
-                log = True
                 for arg, values in actions:
-                    if arg == "clean":
-                        if log: print("Doing clean")
-                        for file, names in files_to_process.items():
-                            names['new_name'] = clean_filename(names['new_name'])
-                    elif arg == "replace":
-                        if log: print("Doing Replace")
-                        old, new = values[0], values[1]
-                        for file, names in files_to_process.items():
-                            names['new_name'] = names['new_name'].replace(old, new)
-                    elif arg == "regex_replace":
-                        if log: print("Doing Regex Replace")
-                        print(values)
-                        pattern, replacement = values[0], values[1]
-                        for file, names in files_to_process.items():
-                            names['new_name'] = regex_replace_in_filenames(names['new_name'], pattern, replacement)
-                    elif arg == "ext_replace":
-                        if log: print("Doing extension Replace")
-                        old_ext, new_ext = values[0], values[1]
-                        for file, names in files_to_process.items():
-                            if names['new_name'].endswith(old_ext):
-                                names['new_name'] = names['new_name'].replace(old_ext, new_ext)
-                    elif arg == "prefix":
-                        if log: print("Doing prefix")
-                        for file, names in files_to_process.items():
-                            names['new_name'] = values + names['new_name']
-                    elif arg == "suffix":
-                        if log: print("Doing suffix")
-                        for file, names in files_to_process.items():
-                            names['new_name'] = f"{Path(names['new_name']).stem}{values}{Path(names['new_name']).suffix}"
-                        
+                    for file, names in files_to_process.items():
+                        names['new_name'] = process_filename(names['new_name'], arg, values)
+
             # Show the updated previews after each command
             print("\nUpdated Previews:")
             for file, names in files_to_process.items():
