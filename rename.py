@@ -9,6 +9,15 @@ GREEN = "\033[92m"
 END = "\033[0m"
 
 
+class OrderedAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if not hasattr(namespace, 'ordered_args'):
+            setattr(namespace, 'ordered_args', [])
+        previous = namespace.ordered_args
+        previous.append((self.dest, values))
+        setattr(namespace, 'ordered_args', previous)
+
+
 def extension_type(value):
     """Ensure extensions start with a dot."""
     if not value.startswith('.'):
@@ -34,19 +43,41 @@ def regex_replace_in_filenames(path, pattern, replacement):
         return new_path
     return path
 
-
 class ReplaceAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
+        # Handle replacement logic
         if len(values) == 1:
             old = values[0]
             new = ""
         else:
             old, new = values[0], values[1]
+        
+        # Add the replacement to the appropriate list
         replacements = getattr(namespace, self.dest, None)
         if replacements is None:
             replacements = []
             setattr(namespace, self.dest, replacements)
         replacements.append((old, new))
+        
+        # Track the order of the arguments
+        if not hasattr(namespace, 'ordered_args'):
+            setattr(namespace, 'ordered_args', [])
+        
+        # Add this action to the ordered arguments list
+        namespace.ordered_args.append((self.dest, values))
+
+# class ReplaceAction(argparse.Action):
+#     def __call__(self, parser, namespace, values, option_string=None):
+#         if len(values) == 1:
+#             old = values[0]
+#             new = ""
+#         else:
+#             old, new = values[0], values[1]
+#         replacements = getattr(namespace, self.dest, None)
+#         if replacements is None:
+#             replacements = []
+#             setattr(namespace, self.dest, replacements)
+#         replacements.append((old, new))
 
 
 def confirm_rename(old_name, new_name):
@@ -77,28 +108,50 @@ def rename_file(path, replacements, args, target_path, ext_replace):
     replacements_copy = replacements.copy()
     ext_replace_copy = ext_replace.copy()
 
+    log = True
+    if hasattr(args, 'ordered_args'):
+        for arg, values in args.ordered_args:
+            # print(arg, values)
+            if arg == "clean":
+                if log: print("Doing clean")
+                new_name = clean_filename(new_name)
+            elif arg == "replace" and replacements_copy:
+                if log: print("Doing Replace")
+                old, new = replacements_copy.pop(0)
+                new_name = new_name.replace(old, new)
+            elif arg == "ext_replace":
+                if log: print("Doing extension Replace")
+                old_ext, new_ext = ext_replace_copy.pop(0)
+                if new_name.endswith(old_ext):
+                    new_name = new_name.replace(old_ext, new_ext)
+            elif arg == "prefix":
+                if log: print("Doing prefix")
+                new_name = values + new_name
+            elif arg == "suffix":
+                if log: print("Doing suffix")
+                new_name = f"{Path(new_name).stem}{values}{path.suffix}"
     
 
-    log = False
-    for i, arg in enumerate(sys.argv[1:]):
-        if arg == "--clean":
-            if log: print("Doing clean")
-            new_name = clean_filename(new_name)
-        elif arg == "--replace" and replacements_copy:
-            if log: print("Doing Replace")
-            old, new = replacements_copy.pop(0)
-            new_name = new_name.replace(old, new)
-        elif arg == "--ext-replace":
-            if log: print("Doing extension Replace")
-            old_ext, new_ext = ext_replace_copy.pop(0)
-            if new_name.endswith(old_ext):
-                new_name = new_name.replace(old_ext, new_ext)
-        elif arg == "--prefix":
-            if log: print("Doing prefix")
-            new_name = prefix + new_name
-        elif arg == "--suffix":
-            if log: print("Doing suffix")
-            new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
+    # log = False
+    # for i, arg in enumerate(sys.argv[1:]):
+    #     if arg == "--clean":
+    #         if log: print("Doing clean")
+    #         new_name = clean_filename(new_name)
+    #     elif arg == "--replace" and replacements_copy:
+    #         if log: print("Doing Replace")
+    #         old, new = replacements_copy.pop(0)
+    #         new_name = new_name.replace(old, new)
+    #     elif arg == "--ext-replace":
+    #         if log: print("Doing extension Replace")
+    #         old_ext, new_ext = ext_replace_copy.pop(0)
+    #         if new_name.endswith(old_ext):
+    #             new_name = new_name.replace(old_ext, new_ext)
+    #     elif arg == "--prefix":
+    #         if log: print("Doing prefix")
+    #         new_name = prefix + new_name
+    #     elif arg == "--suffix":
+    #         if log: print("Doing suffix")
+    #         new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
 
     if new_name == path.name:
         if verbose:
@@ -195,6 +248,7 @@ def interactive_rename(path, replacements, args, target_path, ext_replace, exten
         parser = create_parser()
 
         args = parser.parse_args(user_input.split())
+        # TODO: Don't need replacements, ext_replace. lets get rid of it
         replacements = getattr(args, 'replace', [])
         replacements = [] if replacements is None else replacements
         ext_replace = getattr(args, 'ext_replace', [])
@@ -298,8 +352,8 @@ def create_parser():
     # Add command-line arguments
     parser.add_argument("-T", "--target", type=str, required=True, help="File or directory to rename. Use '.' for the current directory.")
     parser.add_argument("--replace", action=ReplaceAction, nargs='+', help="Replace old text with new text in filenames.")
-    parser.add_argument("--prefix", type=str, help="Add this prefix to filenames.")
-    parser.add_argument("--suffix", type=str, help="Add this suffix to filenames before the extension.")
+    parser.add_argument("--prefix", type=str, action=OrderedAction, help="Add this prefix to filenames.")
+    parser.add_argument("--suffix", type=str, action=OrderedAction, help="Add this suffix to filenames before the extension.")
     parser.add_argument("-R", "--recursive", action="store_true", help="Recursively rename files in subdirectories (if target is a directory).")
     parser.add_argument("--ext", action="append", type=extension_type, help="Only rename files with these extensions (e.g., --ext .txt --ext .jpg).")
     parser.add_argument("--ext-replace", nargs='+', action=ReplaceAction, help="Replace file extensions (e.g., .txt .md).")
@@ -307,7 +361,7 @@ def create_parser():
     parser.add_argument("--verbose", action="store_true", help="Display detailed renaming information.")
     parser.add_argument("--confirm", action="store_true", help="Prompt for confirmation before renaming each file.")
     parser.add_argument("--regex-replace", nargs=2, metavar=("pattern", "replacement"), help="Use regex to replace a pattern in filenames.")
-    parser.add_argument("--clean", action="store_true", help="Remove unwanted characters (e.g., spaces, extra underscores).")
+    parser.add_argument("--clean", action=OrderedAction, help="Remove unwanted characters (e.g., spaces, extra underscores).")
     parser.add_argument("--interactive", action="store_true", help="Enable interactive renaming mode.")
 
     return parser
@@ -316,6 +370,10 @@ def main():
     parser = create_parser()
 
     args = parser.parse_args()
+    if hasattr(args, 'ordered_args'):
+        for arg, values in args.ordered_args:
+            print(arg, values)
+            # print(values)
     replacements = getattr(args, 'replace', [])
     replacements = [] if replacements is None else replacements
     ext_replace = getattr(args, 'ext_replace', [])
