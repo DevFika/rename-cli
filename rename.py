@@ -16,15 +16,14 @@ def extension_type(value):
     return value.lower()
 
 
-def clean_filename(path):
+def clean_filename(name):
     """Remove unwanted characters (e.g., spaces, extra underscores)."""
-    new_name = re.sub(r'[_\s]+', '_', path.name)  # Replace multiple spaces or underscores with a single underscore
+    new_name = re.sub(r'[_\s]+', '_', name)  # Replace multiple spaces or underscores with a single underscore
     new_name = re.sub(r'[^a-zA-Z0-9._-]', '', new_name)  # Remove non-alphanumeric characters
-    if new_name != path.name:
-        new_path = path.with_name(new_name)
+    if new_name != name:
         # print(f"Renaming {path.name} to {new_name}")
         return new_name
-    return path.name
+    return name
 
 
 def regex_replace_in_filenames(path, pattern, replacement):
@@ -73,26 +72,49 @@ def rename_file(path, replacements, args, target_path, ext_replace):
     clean = args.clean
     
     new_name = path.name
+    replacements_copy = replacements.copy()
+    ext_replace_copy = ext_replace.copy()
 
-    if clean:
-        new_name = clean_filename(path)
+    log = False
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg == "--clean":
+            if log: print("Doing clean")
+            new_name = clean_filename(new_name)
+        elif arg == "--replace" and replacements_copy:
+            if log: print("Doing Replace")
+            old, new = replacements_copy.pop(0)
+            new_name = new_name.replace(old, new)
+        elif arg == "--ext-replace":
+            if log: print("Doing extension Replace")
+            old_ext, new_ext = ext_replace_copy
+            if new_name.endswith(old_ext):
+                new_name = new_name.replace(old_ext, new_ext)
+        elif arg == "--prefix":
+            if log: print("Doing prefix")
+            new_name = prefix + new_name
+        elif arg == "--suffix":
+            if log: print("Doing suffix")
+            new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
+
+    # if clean:
+    #     new_name = clean_filename(path)
 
     # Apply text replacements
-    if replacements:
-        for old, new in replacements:
-            new_name = new_name.replace(old, new)
+    # if replacements:
+    #     for old, new in replacements:
+    #         new_name = new_name.replace(old, new)
 
-    if ext_replace:
-        old_ext, new_ext = ext_replace
-        if new_name.endswith(old_ext):
-            new_name = new_name.replace(old_ext, new_ext)
+    # if ext_replace:
+    #     old_ext, new_ext = ext_replace
+    #     if new_name.endswith(old_ext):
+    #         new_name = new_name.replace(old_ext, new_ext)
 
 
     # Apply prefix and suffix
-    if prefix:
-        new_name = prefix + new_name
-    if suffix:
-        new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
+    # if prefix:
+    #     new_name = prefix + new_name
+    # if suffix:
+    #     new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
 
     if new_name == path.name:
         if verbose:
