@@ -2,21 +2,63 @@ import argparse
 from pathlib import Path
 import sys
 import re
-
+import shlex
+import os
+import difflib
 
 RED = "\033[91m"
 GREEN = "\033[92m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
 END = "\033[0m"
+LIGHT_GRAY = "\033[97m"
+MAGENTA = "\033[95m"
+WARNING_COLOR = RED
+NEW_COLOR = GREEN
+ORIGINAL_COLOR = LIGHT_GRAY
+PENDING_COLOR = YELLOW
+PENDING_HIGHLIGHT_COLOR = GREEN
+END_COLOR = END
+INTERACTIVE_MODE_COLOR = MAGENTA
 
 
 class OrderedAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         if not hasattr(namespace, 'ordered_args'):
             setattr(namespace, 'ordered_args', [])
-        previous = namespace.ordered_args
-        previous.append((self.dest, values))
-        setattr(namespace, 'ordered_args', previous)
+        
+        if values is None:
+            namespace.ordered_args.append((self.dest, True))
+            setattr(namespace, self.dest, True)
+        else:
+            namespace.ordered_args.append((self.dest, values))
+            setattr(namespace, self.dest, values)
 
+def clear_terminal():
+    """Clears the terminal screen."""
+    os.system("cls" if os.name == "nt" else "clear")
+
+def highlight_changes(original, new):
+    """Highlight differences between original and new name."""
+    matcher = difflib.SequenceMatcher(None, original, new)
+    highlighted_original = ""
+    highlighted_new = ""
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            # Keep unchanged text normal in both original and new name
+            highlighted_original += original[i1:i2]
+            highlighted_new += new[j1:j2]
+        elif tag == "replace" or tag == "insert":
+            # Highlight new/inserted text in new name
+            highlighted_new += f"{PENDING_HIGHLIGHT_COLOR}{new[j1:j2]}{END}"
+            # Highlight removed text in original name
+            highlighted_original += f"{RED}{original[i1:i2]}{END}"
+        elif tag == "delete":
+            # Highlight removed text in original name
+            highlighted_original += f"{RED}{original[i1:i2]}{END}"
+
+    return highlighted_original, highlighted_new
 
 def extension_type(value):
     """Ensure extensions start with a dot."""
@@ -48,6 +90,7 @@ class ReplaceAction(argparse.Action):
         # Handle replacement logic
         if len(values) == 1:
             old = values[0]
+            values.append("")
             new = ""
         else:
             old, new = values[0], values[1]
@@ -66,92 +109,48 @@ class ReplaceAction(argparse.Action):
         # Add this action to the ordered arguments list
         namespace.ordered_args.append((self.dest, values))
 
-# class ReplaceAction(argparse.Action):
-#     def __call__(self, parser, namespace, values, option_string=None):
-#         if len(values) == 1:
-#             old = values[0]
-#             new = ""
-#         else:
-#             old, new = values[0], values[1]
-#         replacements = getattr(namespace, self.dest, None)
-#         if replacements is None:
-#             replacements = []
-#             setattr(namespace, self.dest, replacements)
-#         replacements.append((old, new))
-
 
 def confirm_rename(old_name, new_name):
     """Interactive confirmation for renaming."""
     confirm = input(f"Rename {old_name} to {new_name}? (y/n): ")
     if confirm.lower() != 'y':
-        print(f"{RED}Skipping renaming of {old_name}{END}")
+        print(f"{WARNING_COLOR}Skipping renaming of {old_name}{END_COLOR}")
         return False
     return True
 
 
-def rename_file(path, replacements, args, target_path, ext_replace):
+def rename_file(path, args, target_path):
     """Renames a single file based on user-defined rules."""
     if not path.is_file():
         print(f"❌ Error: {path} is not a valid file.", file=sys.stderr)
         return
     
-    prefix = args.prefix
-    suffix = args.suffix
     preview = args.preview
     verbose = args.verbose
     confirm = args.confirm
-    clean = args.clean
     
     new_name = path.name
-
-
-    replacements_copy = replacements.copy()
-    ext_replace_copy = ext_replace.copy()
+    actions = args.ordered_args if hasattr(args, 'ordered_args') else []
 
     log = True
-    if hasattr(args, 'ordered_args'):
-        for arg, values in args.ordered_args:
-            # print(arg, values)
-            if arg == "clean":
-                if log: print("Doing clean")
-                new_name = clean_filename(new_name)
-            elif arg == "replace" and replacements_copy:
-                if log: print("Doing Replace")
-                old, new = replacements_copy.pop(0)
-                new_name = new_name.replace(old, new)
-            elif arg == "ext_replace":
-                if log: print("Doing extension Replace")
-                old_ext, new_ext = ext_replace_copy.pop(0)
-                if new_name.endswith(old_ext):
-                    new_name = new_name.replace(old_ext, new_ext)
-            elif arg == "prefix":
-                if log: print("Doing prefix")
-                new_name = values + new_name
-            elif arg == "suffix":
-                if log: print("Doing suffix")
-                new_name = f"{Path(new_name).stem}{values}{path.suffix}"
-    
 
-    # log = False
-    # for i, arg in enumerate(sys.argv[1:]):
-    #     if arg == "--clean":
-    #         if log: print("Doing clean")
-    #         new_name = clean_filename(new_name)
-    #     elif arg == "--replace" and replacements_copy:
-    #         if log: print("Doing Replace")
-    #         old, new = replacements_copy.pop(0)
-    #         new_name = new_name.replace(old, new)
-    #     elif arg == "--ext-replace":
-    #         if log: print("Doing extension Replace")
-    #         old_ext, new_ext = ext_replace_copy.pop(0)
-    #         if new_name.endswith(old_ext):
-    #             new_name = new_name.replace(old_ext, new_ext)
-    #     elif arg == "--prefix":
-    #         if log: print("Doing prefix")
-    #         new_name = prefix + new_name
-    #     elif arg == "--suffix":
-    #         if log: print("Doing suffix")
-    #         new_name = f"{Path(new_name).stem}{suffix}{path.suffix}"
+    for arg, values in actions:
+        if arg == "clean":
+            if log: print("Doing clean")
+            new_name = clean_filename(new_name)
+        elif arg == "replace":
+            if log: print("Doing Replace")
+            new_name = new_name.replace(values[0], values[1])
+        elif arg == "ext_replace":
+            if log: print("Doing extension Replace")
+            if new_name.endswith(values[0]):
+                new_name = new_name.replace(values[0], values[1])
+        elif arg == "prefix":
+            if log: print("Doing prefix")
+            new_name = values + new_name
+        elif arg == "suffix":
+            if log: print("Doing suffix")
+            new_name = f"{Path(new_name).stem}{values}{Path(new_name).suffix}"
 
     if new_name == path.name:
         if verbose:
@@ -169,7 +168,7 @@ def rename_file(path, replacements, args, target_path, ext_replace):
     relative_new_name = new_path.relative_to(target_path)
 
     rename_text = "Renaming" if not preview else "Preview"
-    print(f"{rename_text}: {RED}{relative_path}{END} -> {GREEN}{relative_new_name}{END}")
+    print(f"{rename_text}: {ORIGINAL_COLOR}{relative_path}{END_COLOR} -> {PENDING_COLOR}{relative_new_name}{END_COLOR}")
 
     if not preview:
         try:
@@ -177,11 +176,11 @@ def rename_file(path, replacements, args, target_path, ext_replace):
                 if confirm_rename(path.name, new_name):  # Confirm before renaming
                     path.rename(new_path)
                     if verbose:
-                        print(f"{GREEN}File renamed successfully!{END}")
+                        print(f"{NEW_COLOR}File renamed successfully!{END_COLOR}")
             else:
                 path.rename(new_path)
                 if verbose:
-                    print(f"{GREEN}File renamed successfully!{END}")
+                    print(f"{NEW_COLOR}File renamed successfully!{END_COLOR}")
         except FileExistsError:
             print(f"⚠️ Error: {new_path} already exists.", file=sys.stderr)
         except PermissionError:
@@ -190,7 +189,7 @@ def rename_file(path, replacements, args, target_path, ext_replace):
             print(f"❌ Error renaming {path}: {e}", file=sys.stderr)
 
 
-def rename_files(directory, replacements, args, extensions, target_path, ext_replace):
+def rename_files(directory, args, extensions, target_path):
     """Renames multiple files in a directory based on user-defined rules and filters."""
     directory = Path(directory).resolve()
 
@@ -198,8 +197,6 @@ def rename_files(directory, replacements, args, extensions, target_path, ext_rep
         print(f"❌ Error: {directory} is not a valid directory.", file=sys.stderr)
         return
     
-    prefix = args.prefix
-    suffix = args.suffix
     preview = args.preview
     verbose = args.verbose
     confirm = args.confirm
@@ -215,12 +212,14 @@ def rename_files(directory, replacements, args, extensions, target_path, ext_rep
                     print(f"⚠️ Skipping: {path} (does not match specified extensions: {extensions})", file=sys.stderr)
                 continue  # Skip files that don"t match the given extensions
             
-            rename_file(path, replacements, args, target_path, ext_replace)
+            rename_file(path, args, target_path)
 
-def interactive_rename(path, replacements, args, target_path, ext_replace, extensions):
+def interactive_rename(path, args, target_path, extensions):
     """Interactive renaming of files in a directory."""
     # Get the list of files to process
     files_to_process = {}
+    verbose = args.verbose
+    history = []
 
     # If the target is a file, add it to the dictionary
     if path.is_file():
@@ -238,132 +237,134 @@ def interactive_rename(path, replacements, args, target_path, ext_replace, exten
 
     # Loop until the user confirms the rename or exits for all files
     while True:
-        # Show the current preview of the filenames
-        for file, names in files_to_process.items():
-            print(f"Preview: {names['original_name']} -> {names['new_name']}")
-
-        # Ask the user to input a command or apply the changes
-        print("y to appply, n to quit")
-        user_input = input("Interactive Mode:  ").strip()
-        parser = create_parser()
-
-        args = parser.parse_args(user_input.split())
-        # TODO: Don't need replacements, ext_replace. lets get rid of it
-        replacements = getattr(args, 'replace', [])
-        replacements = [] if replacements is None else replacements
-        ext_replace = getattr(args, 'ext_replace', [])
-        ext_replace = [] if ext_replace is None else ext_replace
-        extensions = {ext.lower() for ext in args.ext} if args.ext else None
-
-        replacements_copy = replacements.copy()
-        ext_replace_copy = ext_replace.copy()
-
-        prefix = args.prefix
-        suffix = args.suffix
-        preview = args.preview
-        verbose = args.verbose
-        confirm = args.confirm
-        clean = args.clean
-
-        if user_input.lower() == 'y':
-            # User confirmed the rename for all files
+        try:
+            clear_terminal()
+            # Show the current preview of the filenames
             for file, names in files_to_process.items():
-                file.rename(file.with_name(names['new_name']))  # Apply the name change
-            print(f"Renamed files successfully.")
-            break  # Break the loop and exit the interactive mode
-        elif user_input.lower() == 'n':
-            # User skipped the rename for all files
-            print("Skipped renaming files.")
-            break  # Break the loop and exit the interactive mode
-        elif user_input.lower() == "quit":
-            # Exit the interactive mode entirely
-            print("Exiting interactive mode.")
-            sys.exit(1)
-        
-        else:
-            for i, arg in enumerate(sys.argv[:]):
-                print(arg)
-                if arg == "--clean":
-                    for file, names in files_to_process.items():
-                        names['new_name'] = clean_filename(names['new_name'])
-                elif arg == "--replace" and replacements_copy:
-                    old, new = replacements_copy.pop(0)
-                    for file, names in files_to_process.items():
-                        names['new_name'] = names['new_name'].replace(old, new)
-                elif arg == "--ext-replace":
-                    old_ext, new_ext = ext_replace_copy.pop(0)
-                    for file, names in files_to_process.items():
-                        if names['new_name'].endswith(old_ext):
-                            names['new_name'] = names['new_name'].replace(old_ext, new_ext)
-                elif arg == "--prefix":
-                    for file, names in files_to_process.items():
-                        names['new_name'] = prefix + names['new_name']
-                elif arg == "--suffix":
-                    for file, names in files_to_process.items():
-                        names['new_name'] = f"{Path(names['new_name']).stem}{suffix}{file.suffix}"
+                original_name = f"{names['original_name']}"
+                new_name = f"{names['new_name']}"
+                highlighted_original, highlighted_new = highlight_changes(original_name, new_name)
+                print(f"Preview: {highlighted_original} -> {highlighted_new}")
+
+            print(f"{NEW_COLOR}--apply{END_COLOR}: Apply all changes, "
+                f"{WARNING_COLOR}--exit{END_COLOR}: Quit, "
+                f"{PENDING_COLOR}--confirm{END_COLOR}: Review & apply individually, "
+                f"{CYAN}--undo{END_COLOR}: Revert last change.")
 
 
-            # Handle the input command and apply changes progressively to all files
-            # if user_input.startswith('--prefix'):
-            #     # Extract prefix argument
-            #     prefix = user_input.split(' ', 1)[1].strip()
-            #     for file, names in files_to_process.items():
-            #         names['new_name'] = prefix + names['new_name']
+            user_input = input(f"{INTERACTIVE_MODE_COLOR}Interactive Mode{END_COLOR}: ").strip()
 
-            # elif user_input.startswith('--replace'):
-            #     # Extract replacement arguments
-            #     parts = user_input.split(' ', 2)
-            #     if len(parts) == 3:
-            #         old, new = parts[1], parts[2]
-            #         for file, names in files_to_process.items():
-            #             names['new_name'] = names['new_name'].replace(old, new)
+            parser = create_parser(interactive_mode=True)
 
-            # elif user_input.startswith('--suffix'):
-            #     # Extract suffix argument
-            #     suffix = user_input.split(' ', 1)[1].strip()
-            #     for file, names in files_to_process.items():
-            #         names['new_name'] = f"{Path(names['new_name']).stem}{suffix}{file.suffix}"
+            args = parser.parse_args(shlex.split(user_input))
 
-            # elif user_input.startswith('--clean'):
-            #     # Apply clean filename operation to all files
-            #     for file, names in files_to_process.items():
-            #         names['new_name'] = clean_filename(names['new_name'])
+            extensions = {ext.lower() for ext in args.ext} if args.ext else None
 
-            # elif user_input.startswith('--ext-replace'):
-            #     # Apply extension replacement to all files
-            #     if ext_replace:
-            #         old_ext, new_ext = ext_replace[0]
-            #         for file, names in files_to_process.items():
-            #             if names['new_name'].endswith(old_ext):
-            #                 names['new_name'] = names['new_name'].replace(old_ext, new_ext)
+            preview = args.preview
+            
+            if args.undo:
+                if history:
+                    print(history)
+                    last_snapshot = history.pop()
+                    print(last_snapshot)
+                    for file, old_name in last_snapshot.items():
+                        files_to_process[file]['new_name'] = old_name
+                else:
+                    print("No changes to undo.")
+                continue
 
-            # else:
-            #     print("Invalid command. Please enter a valid command or 'y' to apply or 'n' to skip.")
+            if args.apply or args.confirm:
+                # User confirmed the rename for all files
+                for file, names in files_to_process.items():
+                    if names['new_name'] == names['original_name']:
+                        if verbose:
+                            print(f"ℹ️ No changes needed: {path}")
+                        continue
+                    if args.confirm:
+                        if confirm_rename(file.name, names['new_name']):  # Confirm before renaming
+                                file.rename(file.with_name(names['new_name']))
+                                if verbose:
+                                    print(f"{NEW_COLOR}File renamed successfully!{END_COLOR}")
+                    else:
+                        file.rename(file.with_name(names['new_name']))  # Apply the name change
+                        if verbose:
+                            print(f"{NEW_COLOR}File renamed successfully!{END_COLOR}")
+                break
 
-        # Show the updated previews after each command
-        print("\nUpdated Previews:")
-        for file, names in files_to_process.items():
-            print(f"{names['new_name']}")
+            elif args.exit:
+                print("Exiting interactive mode.")
+                break
 
-def create_parser():
+            
+            
+            else:
+                current_snapshot: dict = {file: names['new_name'] for file, names in files_to_process.items()}
+                history.append(current_snapshot)
+
+                actions = args.ordered_args if hasattr(args, 'ordered_args') else []
+                log = True
+                for arg, values in actions:
+                    if arg == "clean":
+                        if log: print("Doing clean")
+                        for file, names in files_to_process.items():
+                            names['new_name'] = clean_filename(names['new_name'])
+                    elif arg == "replace":
+                        if log: print("Doing Replace")
+                        old, new = values[0], values[1]
+                        for file, names in files_to_process.items():
+                            names['new_name'] = names['new_name'].replace(old, new)
+                    elif arg == "ext_replace":
+                        if log: print("Doing extension Replace")
+                        old_ext, new_ext = values[0], values[1]
+                        for file, names in files_to_process.items():
+                            if names['new_name'].endswith(old_ext):
+                                names['new_name'] = names['new_name'].replace(old_ext, new_ext)
+                    elif arg == "prefix":
+                        if log: print("Doing prefix")
+                        for file, names in files_to_process.items():
+                            names['new_name'] = values + names['new_name']
+                    elif arg == "suffix":
+                        if log: print("Doing suffix")
+                        for file, names in files_to_process.items():
+                            names['new_name'] = f"{Path(names['new_name']).stem}{values}{Path(names['new_name']).suffix}"
+                        
+            # Show the updated previews after each command
+            print("\nUpdated Previews:")
+            for file, names in files_to_process.items():
+                print(f"{PENDING_COLOR}{names['new_name']}{END_COLOR}")
+        except SystemExit:  # Catch argparse exiting due to invalid input
+            print("\033[91mInvalid input. Please try again.\033[0m")  # Red error message
+        except KeyboardInterrupt:  # Handle Ctrl+C gracefully
+            print("\nExiting interactive mode.")
+            break
+
+def create_parser(interactive_mode: bool = False):
     """Create and return the argument parser."""
     parser = argparse.ArgumentParser(description="Batch rename files.")
 
     # Add command-line arguments
-    parser.add_argument("-T", "--target", type=str, required=True, help="File or directory to rename. Use '.' for the current directory.")
+    if not interactive_mode:
+        parser.add_argument("-T", "--target", type=str, required=True, help="File or directory to rename. Use '.' for the current directory.")
     parser.add_argument("--replace", action=ReplaceAction, nargs='+', help="Replace old text with new text in filenames.")
     parser.add_argument("--prefix", type=str, action=OrderedAction, help="Add this prefix to filenames.")
     parser.add_argument("--suffix", type=str, action=OrderedAction, help="Add this suffix to filenames before the extension.")
-    parser.add_argument("-R", "--recursive", action="store_true", help="Recursively rename files in subdirectories (if target is a directory).")
+    if not interactive_mode:
+        parser.add_argument("-R", "--recursive", action="store_true", help="Recursively rename files in subdirectories (if target is a directory).")
+    
     parser.add_argument("--ext", action="append", type=extension_type, help="Only rename files with these extensions (e.g., --ext .txt --ext .jpg).")
     parser.add_argument("--ext-replace", nargs='+', action=ReplaceAction, help="Replace file extensions (e.g., .txt .md).")
+    # if not interactive_mode:
     parser.add_argument("--preview", action="store_true", help="Preview changes without renaming files.")
     parser.add_argument("--verbose", action="store_true", help="Display detailed renaming information.")
     parser.add_argument("--confirm", action="store_true", help="Prompt for confirmation before renaming each file.")
     parser.add_argument("--regex-replace", nargs=2, metavar=("pattern", "replacement"), help="Use regex to replace a pattern in filenames.")
-    parser.add_argument("--clean", action=OrderedAction, help="Remove unwanted characters (e.g., spaces, extra underscores).")
-    parser.add_argument("--interactive", action="store_true", help="Enable interactive renaming mode.")
-
+    parser.add_argument("--clean", nargs=0, action=OrderedAction, help="Remove unwanted characters (e.g., spaces, extra underscores).")
+    if not interactive_mode:
+        parser.add_argument("--interactive", action="store_true", help="Enable interactive renaming mode.")
+    if interactive_mode:
+        parser.add_argument("--exit", action="store_true", help="Exit interactive mode.")
+        parser.add_argument("--apply", action="store_true", help="Apply changes in interactive mode.")
+        parser.add_argument("--undo", action="store_true", help="Undo the last change in interactive mode.")
     return parser
 
 def main():
@@ -384,7 +385,7 @@ def main():
     target_path = Path(args.target).resolve()
 
     if args.interactive:
-        interactive_rename(target_path, replacements, args, target_path, ext_replace, extensions)
+        interactive_rename(target_path, args, target_path, extensions)
         #     sys.exit(1)
     else:
         if target_path.is_file():
@@ -393,10 +394,10 @@ def main():
                 print(f"⚠️ Skipping {target_path} (does not match specified extensions: {extensions})")
                 return
             
-            rename_file(target_path, replacements, args, target_path, ext_replace)
+            rename_file(target_path, args, target_path)
         elif target_path.is_dir():
             # Directory mode
-            rename_files(target_path, replacements, args, extensions, target_path, ext_replace)
+            rename_files(target_path, args, extensions, target_path)
         else:
             print(f"❌ Error: {args.target} is not a valid file or directory.", file=sys.stderr)
             sys.exit(1)
