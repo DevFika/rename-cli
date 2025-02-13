@@ -5,6 +5,7 @@ import re
 import shlex
 import os
 import difflib
+import shutil
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -13,6 +14,7 @@ CYAN = "\033[96m"
 END = "\033[0m"
 LIGHT_GRAY = "\033[97m"
 DARK_GRAY = "\033[90m"
+DARKER_GRAY = "\033[38;5;245m"
 MAGENTA = "\033[95m"
 GREEN46 = f"\033[38;5;46m"
 COLOR229 = f"\033[38;5;229m"
@@ -21,7 +23,7 @@ LIGHT_GREEN_GRAY = "\033[38;5;147m"
 LIGHT_YELLOW_GRAY = "\033[38;5;190m"
 WARNING_COLOR = RED
 NEW_COLOR = GREEN
-ORIGINAL_COLOR = LIGHT_GRAY
+ORIGINAL_COLOR = DARKER_GRAY
 PENDING_COLOR = YELLOW
 PENDING_HIGHLIGHT_COLOR = GREEN
 END_COLOR = END
@@ -56,7 +58,7 @@ def highlight_changes(original, new):
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             # Keep unchanged text normal in both original and new name
-            highlighted_original += f"{DARK_GRAY}{original[i1:i2]}{END}"
+            highlighted_original += f"{DARKER_GRAY}{original[i1:i2]}{END}"
             highlighted_new += f"{LIGHT_GRAY}{new[j1:j2]}{END}"
         elif tag == "replace" or tag == "insert":
             # Highlight new/inserted text in new name
@@ -176,18 +178,486 @@ def camel_case_to_snake_case(name, ignore_extension):
         new_name = new_base_name + ext
     return new_name
 
-def snake_case_to_pascal_case(name, ignore_extension):
-    """Convert snake_case to PascalCase (CamelCase with first letter capitalized)."""
-    
+def pascal_case_to_camel_case(name, ignore_extension):
+    """Convert PascalCase to camelCase."""
+
     def convert(text):
-        return ''.join(word.capitalize() for word in text.split('_'))  # Capitalize each part
+        # Lowercase the first character, keep the rest as is
+        return text[0].lower() + text[1:]
 
     if ignore_extension:
         new_name = convert(name)
     else:
         base_name, ext = os.path.splitext(name)
         new_base_name = convert(base_name)
-        new_name = new_base_name + ext  # Reattach extension
+        new_name = new_base_name + ext
+
+    return new_name
+
+def pascal_case_to_kebab_case(name, ignore_extension):
+    """Convert PascalCase to kebab-case."""
+
+    def convert(text):
+        # Insert hyphen before each capital letter (except the first) and convert to lowercase
+        return re.sub(r'([a-z])([A-Z])', r'\1-\2', text).lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def pascal_case_to_title_case(name, ignore_extension):
+    """Convert PascalCase to Title Case."""
+
+    def convert(text):
+        # Insert space before each capital letter (except the first)
+        return re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def pascal_case_to_snake_case(name, ignore_extension):
+    """Convert PascalCase to snake_case."""
+
+    def convert(text):
+        # Insert underscore before each capital letter (except the first) and convert to lowercase
+        return re.sub(r'([a-z])([A-Z])', r'\1_\2', text).lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def pascal_case_to_spaces(name, ignore_extension):
+    """Convert PascalCase to a format with spaces."""
+
+    def convert(text):
+        # Insert space before each capital letter (except the first)
+        return re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def snake_case_to_pascal_case(name, ignore_extension):
+    """Convert snake_case to PascalCase (CamelCase with first letter capitalized)."""
+    
+    def convert(text):
+        return ''.join(word.capitalize() for word in text.split('_'))
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def snake_case_to_camel_case(name, ignore_extension):
+    """Convert snake_case to camelCase."""
+
+    def convert(text):
+        # Split the text by underscores and capitalize each word except the first one
+        words = text.split('_')
+        return words[0] + ''.join(word.capitalize() for word in words[1:])
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def snake_case_to_kebab_case(name, ignore_extension):
+    """Convert snake_case to kebab-case."""
+
+    def convert(text):
+        # Replace underscores with hyphens and convert to lowercase
+        return text.replace('_', '-').lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def snake_case_to_title_case(name, ignore_extension):
+    """Convert snake_case to Title Case."""
+
+    def convert(text):
+        # Capitalize each word and join with spaces
+        return ' '.join(word.capitalize() for word in text.split('_'))
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def snake_case_to_spaces(name, ignore_extension):
+    """Convert snake_case to a format with spaces."""
+
+    def convert(text):
+        # Replace underscores with spaces
+        return text.replace('_', ' ')
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def camel_case_to_pascal_case(name, ignore_extension):
+    """Convert camelCase to PascalCase."""
+
+    def convert(text):
+        # Capitalize the first character, keep the rest as is
+        return text[0].upper() + text[1:]
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def camel_case_to_snake_case(name, ignore_extension):
+    """Convert camelCase to snake_case."""
+
+    def convert(text):
+        # Insert underscore before each capital letter and convert to lowercase
+        return re.sub(r'([a-z])([A-Z])', r'\1_\2', text).lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def camel_case_to_kebab_case(name, ignore_extension):
+    """Convert camelCase to kebab-case."""
+
+    def convert(text):
+        # Insert hyphen before each capital letter and convert to lowercase
+        return re.sub(r'([a-z])([A-Z])', r'\1-\2', text).lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def camel_case_to_title_case(name, ignore_extension):
+    """Convert camelCase to Title Case."""
+
+    def convert(text):
+        # Insert space before each capital letter
+        return re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def camel_case_to_spaces(name, ignore_extension):
+    """Convert camelCase to a format with spaces."""
+
+    def convert(text):
+        # Insert space before each capital letter
+        return re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def kebab_case_to_snake_case(name, ignore_extension):
+    """Convert kebab-case to snake_case."""
+
+    def convert(text):
+        # Replace hyphens with underscores
+        return text.replace('-', '_')
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def kebab_case_to_pascal_case(name, ignore_extension):
+    """Convert kebab-case to PascalCase."""
+
+    def convert(text):
+        # Capitalize each word and remove hyphens
+        return ''.join(word.capitalize() for word in text.split('-'))
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def kebab_case_to_camel_case(name, ignore_extension):
+    """Convert kebab-case to camelCase."""
+
+    def convert(text):
+        # Capitalize each word except the first one and remove hyphens
+        words = text.split('-')
+        return words[0] + ''.join(word.capitalize() for word in words[1:])
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def kebab_case_to_title_case(name, ignore_extension):
+    """Convert kebab-case to Title Case."""
+
+    def convert(text):
+        # Capitalize each word and replace hyphens with spaces
+        return ' '.join(word.capitalize() for word in text.split('-'))
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def kebab_case_to_spaces(name, ignore_extension):
+    """Convert kebab-case to a format with spaces."""
+
+    def convert(text):
+        # Replace hyphens with spaces
+        return text.replace('-', ' ')
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def title_case_to_snake_case(name, ignore_extension):
+    """Convert Title Case to snake_case."""
+
+    def convert(text):
+        # Replace spaces with underscores and convert to lowercase
+        return text.replace(' ', '_').lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def title_case_to_pascal_case(name, ignore_extension):
+    """Convert Title Case to PascalCase."""
+
+    def convert(text):
+        # Capitalize each word and remove spaces
+        return ''.join(word.capitalize() for word in text.split())
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def title_case_to_camel_case(name, ignore_extension):
+    """Convert Title Case to camelCase."""
+
+    def convert(text):
+        # Capitalize each word except the first one and remove spaces
+        words = text.split()
+        return words[0].lower() + ''.join(word.capitalize() for word in words[1:])
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def title_case_to_spaces(name, ignore_extension):
+    """Convert Title Case to a format with spaces."""
+
+    def convert(text):
+        # Convert to lowercase and replace spaces with spaces (no change needed)
+        return text.lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def title_case_to_kebab_case(name, ignore_extension):
+    """Convert Title Case to kebab-case."""
+
+    def convert(text):
+        # Replace spaces with hyphens and convert to lowercase
+        return text.replace(' ', '-').lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def spaces_to_snake_case(name, ignore_extension):
+    """Convert spaces to snake_case."""
+
+    def convert(text):
+        # Replace spaces with underscores and convert to lowercase
+        return text.replace(' ', '_').lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def spaces_to_pascal_case(name, ignore_extension):
+    """Convert spaces to PascalCase."""
+
+    def convert(text):
+        # Capitalize each word and remove spaces
+        return ''.join(word.capitalize() for word in text.split())
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def spaces_to_camel_case(name, ignore_extension):
+    """Convert spaces to camelCase."""
+
+    def convert(text):
+        # Capitalize each word except the first one and remove spaces
+        words = text.split()
+        return words[0].lower() + ''.join(word.capitalize() for word in words[1:])
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def spaces_to_kebab_case(name, ignore_extension):
+    """Convert spaces to kebab-case."""
+
+    def convert(text):
+        # Replace spaces with hyphens and convert to lowercase
+        return text.replace(' ', '-').lower()
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
+
+    return new_name
+
+def spaces_to_title_case(name, ignore_extension):
+    """Convert spaces to Title Case."""
+
+    def convert(text):
+        # Capitalize each word
+        return ' '.join(word.capitalize() for word in text.split())
+
+    if ignore_extension:
+        new_name = convert(name)
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_base_name = convert(base_name)
+        new_name = new_base_name + ext
 
     return new_name
 
@@ -396,6 +866,78 @@ def add_suffix(name, suffix, ignore_extension):
         new_name = base_name + suffix + ext
     return new_name
 
+def handle_case(name, values, ignore_extension):
+    from_case = values[0]
+    to_case = values[1]
+    ignore_caps = (len(values) > 2 and values[2] == "-ignore-caps")
+    if from_case == "snake":
+        if to_case == "pascal":
+            new_name = snake_case_to_pascal_case(name, ignore_extension)
+        elif to_case == "camel":
+            new_name = snake_case_to_camel_case(name, ignore_extension)
+        elif to_case == "kebab":
+            new_name = snake_case_to_kebab_case(name, ignore_extension)
+        elif to_case == "title":
+            new_name = snake_case_to_title_case(name, ignore_extension)
+        elif to_case == "space":
+            new_name = snake_case_to_spaces(name, ignore_extension)
+    elif from_case == "pascal":
+        if to_case == "snake":
+            new_name = pascal_case_to_snake_case(name, ignore_extension)
+        elif to_case == "camel":
+            new_name = pascal_case_to_camel_case(name, ignore_extension)
+        elif to_case == "kebab":
+            new_name = pascal_case_to_kebab_case(name, ignore_extension)
+        elif to_case == "title":
+            new_name = pascal_case_to_title_case(name, ignore_extension)
+        elif to_case == "space":
+            new_name = pascal_case_to_spaces(name, ignore_extension)
+    elif from_case == "camel":
+        if to_case == "snake":
+            new_name = camel_case_to_snake_case(name, ignore_extension)
+        elif to_case == "pascal":
+            new_name = camel_case_to_pascal_case(name, ignore_extension)
+        elif to_case == "kebab":
+            new_name = camel_case_to_kebab_case(name, ignore_extension)
+        elif to_case == "title":
+            new_name = camel_case_to_title_case(name, ignore_extension)
+        elif to_case == "space":
+            new_name = camel_case_to_spaces(name, ignore_extension)
+    elif from_case == "kebab":
+        if to_case == "snake":
+            new_name = kebab_case_to_snake_case(name, ignore_extension)
+        elif to_case == "pascal":
+            new_name = kebab_case_to_pascal_case(name, ignore_extension)
+        elif to_case == "camel":
+            new_name = kebab_case_to_camel_case(name, ignore_extension)
+        elif to_case == "title":
+            new_name = kebab_case_to_title_case(name, ignore_extension)
+        elif to_case == "space":
+            new_name = kebab_case_to_spaces(name, ignore_extension)
+    elif from_case == "title":
+        if to_case == "snake":
+            new_name = title_case_to_snake_case(name, ignore_extension)
+        elif to_case == "pascal":
+            new_name = title_case_to_pascal_case(name, ignore_extension)
+        elif to_case == "camel":
+            new_name = title_case_to_camel_case(name, ignore_extension)
+        elif to_case == "kebab":
+            new_name = title_case_to_kebab_case(name, ignore_extension)
+        elif to_case == "space":
+            new_name = title_case_to_spaces(name, ignore_extension)
+    elif from_case == "space":
+        if to_case == "snake":
+            new_name = spaces_to_snake_case(name, ignore_extension)
+        elif to_case == "pascal":
+            new_name = spaces_to_pascal_case(name, ignore_extension)
+        elif to_case == "camel":
+            new_name = spaces_to_camel_case(name, ignore_extension)
+        elif to_case == "kebab":
+            new_name = spaces_to_kebab_case(name, ignore_extension)
+        elif to_case == "title":
+            new_name = spaces_to_title_case(name, ignore_extension)
+    return new_name
+    
 def process_filename(name, arg, values, args):
     ignore_extension = args.ignore_extension
     """Apply selected transformations."""
@@ -449,8 +991,10 @@ def process_filename(name, arg, values, args):
         name = insert_text_at_position(name, values[0], int(values[1]), ignore_extension)
     elif arg == "reverse":
         name = reverse_string(name, ignore_extension)
-    elif arg == "hash":
-        name = hash_filename(name, values[0], ignore_extension)
+    elif arg == "case":
+        name = handle_case(name, values, ignore_extension)
+    # elif arg == "hash":
+    #     name = hash_filename(name, values[0], ignore_extension)
 
     return name
 
@@ -518,8 +1062,8 @@ def rename_file(path, args, target_path):
     # if any(f.lower() == new_path.name.lower() for f in os.listdir(new_path.parent)):
     # if new_path.name.lower() == new_path.name.lower() and path.name != new_path.name:
     # if new_path.exists():
-        # print(f"⚠️  Skipping (target exists): {path} -> {new_path}")
-        # return
+    #     print(f"⚠️  Skipping (target exists): {path} -> {new_path}")
+    #     return
 
     relative_path = path.relative_to(target_path)
     relative_new_name = new_path.relative_to(target_path)
@@ -574,36 +1118,47 @@ def rename_files(directory, args, extensions, target_path):
             rename_file(path, args, target_path)
 
 def pretty_print_preview(files_to_process):
-    # Print a header with a border
+    # Print a header with a fancy border
     print(f"{BOLD}{UNDERLINE}File Renaming Preview{END_COLOR}")
-    print("=" * 50)
+    terminal_width = shutil.get_terminal_size().columns
+    print("━" * terminal_width)
 
-    for file, names in files_to_process.items():
+    # Iterate through the files to process
+    for i, (file, names) in enumerate(files_to_process.items()):
         original_name = f"{names['original_name']}"
         new_name = f"{names['new_name']}"
         highlighted_original, highlighted_new = highlight_changes(original_name, new_name)
-        # print(f"Preview: {highlighted_original} -> {highlighted_new}")
-        # print(f"{highlighted_original:<50} -> {highlighted_new}")
-        # print(f"Original: {highlighted_original}")
-        # print(f"New: {highlighted_new}")
-        # print()  # Adds a blank line for better readability between entries
         max_length = max(len(highlighted_original), len(highlighted_new))
+        
+        # Print original and new names with colors
+        print(f"{WARNING_COLOR}■{END_COLOR} {highlighted_original:<{max_length}}")
+        print(f"{NEW_COLOR}■{END_COLOR} {highlighted_new:<{max_length}}")
+        
+        # Check if this is the last item and skip the blank line after it
+        if i != len(files_to_process) - 1:
+            print()  # Adds a blank line for better readability between entries
     
-        print(f"Original: {highlighted_original:<{max_length}}")
-        print(f"New:      {highlighted_new:<{max_length}}")
-        print()  # Adds a blank line for better readability between entries
-        # print(f"Original: {highlighted_original}")
-        # print(f"New: {highlighted_new}")
-
     # Print options as a single-line bar
-    print("=" * 50)
+    # print("━" * terminal_width)
     options_bar = (
         f"Options: {NEW_COLOR}--apply{END_COLOR} | "
         f"{WARNING_COLOR}--exit{END_COLOR} | "
         f"{PENDING_COLOR}--confirm{END_COLOR} | "
         f"{CYAN}--undo{END_COLOR}"
     )
-    print(options_bar)
+
+    # Add a box around the options bar┏┃┓
+    padding = " " * 2
+    options_bar_with_box = f"{'━' * (terminal_width)}\n"  # Top border
+
+    # Add the options bar inside the box
+    options_bar_with_box += f"{padding}{options_bar}{padding}\n"
+
+    # Add the bottom border┗┛
+    options_bar_with_box += f"{'━' * (terminal_width)}"
+
+    print(options_bar_with_box)  # Print the boxed options
+
 
 def interactive_rename(path, args, target_path, extensions):
     """Interactive renaming of files in a directory."""
@@ -629,7 +1184,7 @@ def interactive_rename(path, args, target_path, extensions):
     # Loop until the user confirms the rename or exits for all files
     while True:
         try:
-            clear_terminal()
+            # clear_terminal()
 
             pretty_print_preview(files_to_process)
             user_input = input(f"{INTERACTIVE_MODE_COLOR}Interactive Mode{END_COLOR}: ").strip()
@@ -704,7 +1259,7 @@ def create_parser(interactive_mode: bool = False):
     renaming_group.add_argument("-ri", "--replace-index", nargs=3, action=ReplaceAction, metavar=('SEPARATOR', 'INDEX', 'NEW_TEXT'), help="Replace the word at INDEX with NEW_TEXT using SEPARATOR.")
     
     renaming_group.add_argument("-I", "--insert-text", action=OrderedAction, nargs=3, metavar=('TEXT', 'POSITION', 'INDEX'), help="Insert TEXT at POSITION in the filename.")
-    renaming_group.add_argument("-H", "--hash", action=OrderedAction, nargs='?', const='md5', type=str, choices=['md5', 'sha256'], help="Generate a hash of the filename and append or prepend it.")
+    # renaming_group.add_argument("-H", "--hash", action=OrderedAction, nargs='?', const='md5', type=str, choices=['md5', 'sha256'], help="Generate a hash of the filename and append or prepend it.")
 
     selection_group = parser.add_argument_group('File Selection Options', 'Options for selecting which files to rename')
     selection_group.add_argument("-t", "--ext", action="append", type=extension_type, help="Only rename files with these extensions (e.g., --ext .txt --ext .jpg).")
@@ -726,9 +1281,10 @@ def create_parser(interactive_mode: bool = False):
         interactive_group.add_argument("-u", "--undo", action="store_true", help="Undo the last change in interactive mode.")
     
     formatting_group = parser.add_argument_group('Formatting Options', 'Options for formatting filenames')
-    formatting_group.add_argument("--camel-to-snake", nargs=0, action=OrderedAction, help="Convert CamelCase to snake_case")
-    formatting_group.add_argument("--snake-to-camel", nargs=0, action=OrderedAction, help="Convert snake_case to PascalCase")
-    formatting_group.add_argument("--snake-to-pascal", nargs=0, action=OrderedAction, help="Convert snake_case to camelCase")
+    formatting_group.add_argument("--case", nargs="+", action=OrderedAction, choices=['pascal', 'snake', 'camel', 'title', 'kebab', 'space', '--ignore-caps', ''], help="Convert case. Specify the source and target case, e.g., 'snake camel', 'pascal snake'.")
+    # formatting_group.add_argument("--camel-to-snake", nargs=0, action=OrderedAction, help="Convert CamelCase to snake_case")
+    # formatting_group.add_argument("--snake-to-camel", nargs=0, action=OrderedAction, help="Convert snake_case to PascalCase")
+    # formatting_group.add_argument("--snake-to-pascal", nargs=0, action=OrderedAction, help="Convert snake_case to camelCase")
     formatting_group.add_argument("--remove-zeros", nargs=0, action=OrderedAction, help="Remove leading zeros from numbers")
     formatting_group.add_argument("--add-zeros", nargs=1, type=int, action=OrderedAction, help="Add leading zeros to numbers")
     formatting_group.add_argument("--uppercase", nargs=0, action=OrderedAction, help="Convert filename to uppercase")
