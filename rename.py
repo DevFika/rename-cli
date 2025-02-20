@@ -6,6 +6,19 @@ import shlex
 import os
 import difflib
 import shutil
+import imageio.v3 as iio
+import OpenEXR
+import Imath
+
+from PIL import Image
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
+from rich import box
+from rich.tree import Tree
+from rich import print
+from rich.filesize import decimal
+
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -31,6 +44,195 @@ INTERACTIVE_MODE_COLOR = MAGENTA
 BOLD = "\033[1m"
 UNDERLINE = "\033[4m"
 
+RESOLUTION_TAGS = {
+    2: "2",
+    4: "4",
+    8: "8",
+    16: "16",
+    32: "32",
+    64: "64",
+    128: "128",
+    256: "256",
+    512: "512",
+    1024: "1K",
+    2048: "2K",
+    4096: "4K",
+    8192: "8K"
+}
+
+def get_texture_resolution(path):
+    image_path = path.resolve()
+    ext = os.path.splitext(image_path)[-1].lower()
+    # print(image_path)
+    try:
+        if ext in [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]:
+            with Image.open(image_path) as img:
+                return img.width, img.height
+
+        elif ext in [".tga", ".dds"]:
+            img = iio.imread(image_path)
+            return img.shape[1], img.shape[0]  # (width, height)
+        
+        elif ext == ".exr":  # Special handling for .exr
+            # print("EXT FILE")
+            # file = OpenEXR.InputFile(image_path)
+            file = OpenEXR.InputFile(path.as_posix())
+            # print("opening file")
+            header = file.header()
+            # print(header)
+            width = header['displayWindow'].max.x - header['displayWindow'].min.x + 1
+            height = header['displayWindow'].max.y - header['displayWindow'].min.y + 1
+            # print(width)
+            # print(height)
+            return width, height
+        
+        else:
+            return "Unsupported format", None
+
+    except Exception as e:
+        return None, None
+        # return "Error", str(e)
+    
+def get_resolution_tag(width, height):
+    """Convert resolution to tag format (_512, _1K, _2K, etc.)."""
+    if width == height and width in RESOLUTION_TAGS:
+        return RESOLUTION_TAGS[width]
+    return f"{width}x{height}"  # Fallback to exact resolution
+
+def get_image_info(path):
+    image_path = path.resolve()
+    ext = os.path.splitext(image_path)[-1].lower()
+
+    try:
+        if ext in [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]:
+            with Image.open(image_path) as img:
+                bit_depth = img.info.get("bits", 8)  # Default to 8 if not found
+                # print(f"{ext}: bit depth: {bit_depth}")
+                # print(f"{img.mode}")
+
+                mode_to_info = {
+                    "1": ("L", 1),    # 1-bit Black & White
+                    "L": ("L", bit_depth),    # 8-bit Grayscale
+                    "P": ("P", 8),    # 8-bit Palette
+                    "RGB": ("RGB", bit_depth), # 24-bit RGB (8 per channel)
+                    "RGBA": ("RGBA", bit_depth), # 32-bit RGBA (8 per channel)
+                    "I": ("I", 32),  # 32-bit Integer
+                    "F": ("F", 32),  # 32-bit Float
+                    "I;16": ("L", 16)
+                }
+                img_type, bits_per_channel = mode_to_info.get(img.mode, (None, None))
+                return img_type, bits_per_channel
+
+        elif ext in [".tga", ".dds"]:
+            img = iio.imread(image_path)
+            
+            # Check the number of channels to determine if it's RGBA or RGB
+            num_channels = img.shape[-1] if len(img.shape) > 2 else 1
+
+            dtype_to_info = {
+                "uint8": (8, "RGB"),
+                "uint16": (16, "RGB"),
+                "float16": (16, "F16"),
+                "float32": (32, "F32"),
+            }
+
+            # Determine bit depth and type from dtype
+            bit_depth, img_type = dtype_to_info.get(str(img.dtype), (None, None))
+
+            # If it's more than 3 channels, we assume it's RGBA
+            if num_channels == 4:
+                img_type = "RGBA"
+
+            return img_type, bit_depth
+        
+        elif ext == ".exr":
+            file = OpenEXR.InputFile(path.as_posix())
+            header = file.header()
+            channels = header['channels']
+            # print(header)
+            # print(channels)
+            
+            # Extract image data type (based on channels and type)
+            channel_types = set()
+            # print("hello")
+            channel_info = {}
+            overall_bit_depth = 0
+            prefix = ""
+            for channel_name, channel_data in channels.items():
+                # print(f"Channel: {channel_name}, Data: {channel_data}")  # Check the channel data type
+                # print(channel_data.type)
+                
+                pixel_type = channel_data.type
+                # print(pixel_type)
+                # print(Imath.PixelType.FLOAT)
+                # print(Imath.PixelType(Imath.PixelType.HALF))
+                if pixel_type == Imath.PixelType(Imath.PixelType.HALF):
+                    # print(f"Channel '{channel_name}' is of type HALF.")
+                    prefix = "F"
+                    bit_depth = 16
+                    # numpy_type = np.float16
+                elif pixel_type == Imath.PixelType(Imath.PixelType.FLOAT):
+                    # print(f"Channel '{channel_name}' is of type FLOAT.")
+                    prefix = "F"
+                    bit_depth = 32
+                    # numpy_type = np.float32
+                elif pixel_type == Imath.PixelType(Imath.PixelType.UINT):
+                    # print(f"Channel '{channel_name}' is of type UINT.")
+                    bit_depth = 32
+                    prefix = "I"
+                    # numpy_type = np.uint32
+                else:
+                    bit_depth = ""
+                    # print(f"Channel '{channel_name}' has an unknown type.")
+                    # numpy_type = None
+                overall_bit_depth = bit_depth
+
+                channel_info[channel_name] = {
+                "bit_depth": bit_depth,
+                # "numpy_type": numpy_type,
+                "pixel_type": pixel_type,
+            }
+
+            # print(channel_info)
+            # print("CHANNEL INFO")
+            # for channel_name, channel_details in channel_info.items():
+                # print(f"Channel: {channel_name}, Data: {channel_details}")  # Check the channel data type
+                # Now check the data_type
+                # if data_type_str == "FLOAT":
+                #     channel_types.add('float32')
+                # elif data_type_str == "HALF":
+                #     channel_types.add('float16')
+                # elif data_type_str == "UINT":
+                #     channel_types.add('uint8')
+                # else:
+                #     print(f"Unknown data type for {channel_name}: {data_type_str}")
+            
+            # print("hello")
+            # print(channel_types)  # Print out the collected types
+            # colorChannels = ['R', 'G', 'B', 'A'] if 'A' in header['channels'] else ['R', 'G', 'B']
+            img_type = 'RGBA' if len(channels) == 4 else 'RGB'
+            bit_depth = overall_bit_depth
+            # If only one type exists, set the img_type and bit depth
+            # if len(channel_types) == 1:
+            #     img_type = 'RGBA' if len(channels) == 4 else 'RGB'
+            #     bit_depth = channel_types.pop()  # Get the data type of the channels
+            # else:
+            #     img_type = "Unknown"
+            #     bit_depth = "Unknown"
+
+            # If you have only 1 channel, it can be grayscale
+            if len(channels) == 1:
+                img_type = "L"
+                # bit_depth = overall_bit_depth
+
+            bit_depth = f"{prefix}{bit_depth}"
+
+            return img_type, bit_depth
+        else:
+            return None, None
+
+    except Exception as e:
+        return "Error", str(e)
 
 
 class OrderedAction(argparse.Action):
@@ -50,24 +252,21 @@ def clear_terminal():
     os.system("cls" if os.name == "nt" else "clear")
 
 def highlight_changes(original, new):
-    """Highlight differences between original and new name."""
+    """Highlight differences between original and new name using rich.Text."""
     matcher = difflib.SequenceMatcher(None, original, new)
-    highlighted_original = ""
-    highlighted_new = ""
+    
+    highlighted_original = Text()
+    highlighted_new = Text()
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
-            # Keep unchanged text normal in both original and new name
-            highlighted_original += f"{DARKER_GRAY}{original[i1:i2]}{END}"
-            highlighted_new += f"{LIGHT_GRAY}{new[j1:j2]}{END}"
+            highlighted_original.append(original[i1:i2], style="dim")
+            highlighted_new.append(new[j1:j2], style="dim")
         elif tag == "replace" or tag == "insert":
-            # Highlight new/inserted text in new name
-            highlighted_new += f"{PENDING_HIGHLIGHT_COLOR}{new[j1:j2]}{END}"
-            # Highlight removed text in original name
-            highlighted_original += f"{RED}{original[i1:i2]}{END}"
+            highlighted_new.append(new[j1:j2], style="bold green")
+            highlighted_original.append(original[i1:i2], style="bold red")
         elif tag == "delete":
-            # Highlight removed text in original name
-            highlighted_original += f"{RED}{original[i1:i2]}{END}"
+            highlighted_original.append(original[i1:i2], style="bold red")
 
     return highlighted_original, highlighted_new
 
@@ -866,6 +1065,79 @@ def add_suffix(name, suffix, ignore_extension):
         new_name = base_name + suffix + ext
     return new_name
 
+def add_resolution(name, values, ignore_extension, path):
+    """Add a suffix to filenames before the extension."""
+    file_path = path.resolve()
+    # print(file_path)
+    width, height = get_texture_resolution(path)
+    type = values[0]
+
+    # print(width)
+    if width is None or height is None:
+        print(f"Skipping {name}: Unsupported format or error.")
+        return name
+    
+    resolution_suffix = get_resolution_tag(width, height) if type == "tag" else f"{width}x{height}"
+
+    if ignore_extension:
+        new_name = f"{name}_{resolution_suffix}"
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_name = f"{base_name}_{resolution_suffix}{ext}"
+    return new_name
+
+def add_image_info(name, values, ignore_extension, path):
+    """Add a suffix to filenames before the extension."""
+    file_path = path.resolve()
+    # print(file_path)
+    img_type, bits_per_channel = get_image_info(path)
+    if img_type is None or bits_per_channel is None:
+        print(f"Skipping {name}: Unsupported format or error.")
+        return name
+    
+    image_info_suffix = f"{img_type}_{bits_per_channel}"
+
+    if ignore_extension:
+        new_name = f"{name}_{image_info_suffix}"
+    else:
+        base_name, ext = os.path.splitext(name)
+        new_name = f"{base_name}_{image_info_suffix}{ext}"
+    return new_name
+
+def remove_resolution(file_name, type, ignore_extension):
+    # TAG_RESOLUTION_REGEX = r'_(\d+K|\d{3,4})'  # _2K, _1K, _512, etc.
+    # TAG_RESOLUTION_REGEX = r'_(2|4|8|16|32|64|128|256|512|1024|2048|4096|8192)(K)?'  # Matches _2K, _4K, etc.
+    # TAG_RESOLUTION_REGEX = r'(^=\D|$)(2|4|8|16|32|64|128|256|512|1024|2048|4096|8192)(K/k)?(?=\D|$)'
+    TAG_RESOLUTION_REGEX = r'(^|[\s_.-])(2|4|8|16|32|64|128|256|512|1024|2048|4096|8192)(K|k)?(?=[\s_.-]|$)'
+
+    EXACT_RESOLUTION_REGEX = r'_(\d{3,4}x\d{3,4})'  # 2048x2048, 1024x512
+    """Remove resolution (tag or exact) from the filename."""
+    # Extract the file name and extension
+    # file_name = file_path.stem  # without extension
+    file_path, file_extension = os.path.splitext(file_name)
+
+    if ignore_extension:
+        file_name_with_extension = f"{file_path}{file_extension}"  # Treat full name (including extension)
+    else:
+        file_name_with_extension = file_path  # Separate name and extension handling
+
+    # print(file_name)
+    type = type[0]
+    # print(type)
+
+    if type == "tag":
+        file_name_with_extension = re.sub(TAG_RESOLUTION_REGEX, '', file_name_with_extension)
+
+    if type == "exact":
+        file_name_with_extension = re.sub(EXACT_RESOLUTION_REGEX, '', file_name_with_extension)
+
+    if ignore_extension:
+        return file_name_with_extension  # Whole name including extension
+    else:
+        # Rebuild the new filename, keeping the extension intact
+        new_file_name = f"{file_name_with_extension}{file_extension}"
+        return new_file_name
+
 def handle_case(name, values, ignore_extension):
     from_case = values[0]
     to_case = values[1]
@@ -938,7 +1210,62 @@ def handle_case(name, values, ignore_extension):
             new_name = spaces_to_title_case(name, ignore_extension)
     return new_name
     
-def process_filename(name, arg, values, args):
+# Words that should always remain capitalized (expand this list if needed)
+SPECIAL_WORDS = {"1K", "2K", "4K", "8K", "16K", "RGBA", "RGB", "L", "F32", "F16", "EXR", "PNG", "JPEG"}
+
+def convert_to_case(name: str, to_case: str, ignore_extension: bool = False) -> str:
+    """
+    Convert a string from any case (snake_case, kebab-case, camelCase, PascalCase) to the specified case.
+    
+    Special words like "RGBA", "F32", "2K" are preserved in **all cases**.
+
+    Supported `to_case` values:
+        - "snake"   → snake_case
+        - "kebab"   → kebab-case
+        - "camel"   → camelCase
+        - "pascal"  → PascalCase
+        - "space"   → Space Case (words separated by spaces)
+        - "title"   → Title Case (Each Word Capitalized, With Special Words Preserved)
+    """
+
+    def detect_words(text):
+        """Extract words from different naming conventions (kebab, snake, camel, pascal)."""
+        words = re.findall(r'[A-Za-z0-9]+', re.sub(r'([a-z])([A-Z])', r'\1 \2', text))
+        return words  # Return original case for checking against SPECIAL_WORDS
+
+    # Handle file extension separation
+    if not ignore_extension:
+        base_name, ext = os.path.splitext(name)
+    else:
+        base_name, ext = name, ""
+
+    words = detect_words(base_name)
+
+    # Preserve special words (convert everything else as needed)
+    def format_word(word, style):
+        return word if word in SPECIAL_WORDS else (
+            word.lower() if style == "lower" else word.capitalize()
+        )
+
+    # Convert to the desired case
+    if to_case == "snake":
+        new_name = "_".join(format_word(word, "lower") for word in words)
+    elif to_case == "kebab":
+        new_name = "-".join(format_word(word, "lower") for word in words)
+    elif to_case == "camel":
+        new_name = words[0].lower() + "".join(format_word(word, "pascal") for word in words[1:])
+    elif to_case == "pascal":
+        new_name = "".join(format_word(word, "pascal") for word in words)
+    elif to_case == "space":
+        new_name = " ".join(format_word(word, "lower") for word in words)  # Lowercase except SPECIAL_WORDS
+    elif to_case == "title":
+        new_name = " ".join(format_word(word, "pascal") for word in words)  # Capitalized but preserves SPECIAL_WORDS
+    else:
+        raise ValueError(f"Unsupported case: {to_case}")
+
+    return new_name + ext  # Reattach extension
+
+def process_filename(name, arg, values, args, path=None):
     ignore_extension = args.ignore_extension
     """Apply selected transformations."""
     if arg == "camel_to_snake":
@@ -992,7 +1319,15 @@ def process_filename(name, arg, values, args):
     elif arg == "reverse":
         name = reverse_string(name, ignore_extension)
     elif arg == "case":
-        name = handle_case(name, values, ignore_extension)
+        name = convert_to_case(name, values[0], ignore_extension)
+        # name = handle_case(name, values, ignore_extension)
+    elif arg == "add_resolution":
+        name = add_resolution(name, values, ignore_extension, path)
+    elif arg == "remove_resolution":
+        name = remove_resolution(name, values, ignore_extension)
+    elif arg == "add_image_info":
+        name = add_image_info(name, values, ignore_extension, path)
+
     # elif arg == "hash":
     #     name = hash_filename(name, values[0], ignore_extension)
 
@@ -1117,7 +1452,76 @@ def rename_files(directory, args, extensions, target_path):
             
             rename_file(path, args, target_path)
 
-def pretty_print_preview(files_to_process):
+def pretty_print_preview(files_to_process, base_directory="."):
+    console = Console()
+
+    base_directory = Path(base_directory).resolve()
+    tree = Tree(f":open_file_folder: [bold underline]{base_directory}[/bold underline]", guide_style="bold bright_blue")
+
+    folder_nodes = {base_directory: tree}
+
+    for file, names in files_to_process.items():
+        file_path = Path(file).resolve()
+        relative_path = file_path.relative_to(base_directory)
+        parts = relative_path.parts
+
+        parent_node = tree
+        current_path = base_directory
+        for part in parts[:-1]:
+            current_path = current_path / part
+            if current_path not in folder_nodes:
+                folder_nodes[current_path] = parent_node.add(
+                    f":open_file_folder: [bold magenta]{part}[/bold magenta]",
+                    guide_style="dim"
+                )
+            parent_node = folder_nodes[current_path]
+
+            # parent_node = parent_node.add(f":open_file_folder: [bold magenta]{part}[/bold magenta]", guide_style="dim")
+        
+        original_name = names['original_name']
+        new_name = names['new_name']
+
+        highlighted_original, highlighted_new = highlight_changes(original_name, new_name)
+
+        file_size = file_path.stat().st_size if file_path.exists() else 0
+        file_extension = file_path.suffix.lower()
+        file_icon = "📄 "
+        if file_extension == ".py":
+            file_icon = "🐍 "
+        elif file_extension in [".jpg", ".png", ".gif"]:
+            file_icon = "🖼 "
+        elif file_extension in [".mp4", ".mkv"]:
+            file_icon = "🎬 "
+        elif file_extension in [".mp3", ".wav"]:
+            file_icon = "🎵 "
+        elif file_extension in [".zip", ".tar", ".gz"]:
+            file_icon = "📦 "
+
+        file_display = Text(f"{file_icon}")
+        file_display.append(highlighted_original)
+        file_display.append(" → ", style="white")
+        file_display.append(highlighted_new)
+        # file_display.append(f" ({decimal(file_size)})", style="blue")
+
+        parent_node.add(file_display)
+    
+    console.print(tree)
+
+    # Print options bar
+    options_text = Text("\nOptions: ", style="bold white")
+    options_text.append("--apply", style="bold green")
+    options_text.append(" | ")
+    options_text.append("--exit", style="bold red")
+    options_text.append(" | ")
+    options_text.append("--confirm", style="bold yellow")
+    options_text.append(" | ")
+    options_text.append("--undo", style="bold cyan")
+    
+    console.rule(style="bright_black")
+    console.print(options_text, justify="center")
+    console.rule(style="bright_black")
+
+    return
     # Print a header with a fancy border
     print(f"{BOLD}{UNDERLINE}File Renaming Preview{END_COLOR}")
     terminal_width = shutil.get_terminal_size().columns
@@ -1235,7 +1639,7 @@ def interactive_rename(path, args, target_path, extensions):
                 actions = args.ordered_args if hasattr(args, 'ordered_args') else []
                 for arg, values in actions:
                     for file, names in files_to_process.items():
-                        names['new_name'] = process_filename(names['new_name'], arg, values, args)
+                        names['new_name'] = process_filename(names['new_name'], arg, values, args, file)
 
         except SystemExit:  # Catch argparse exiting due to invalid input
             print("\033[91mInvalid input. Please try again.\033[0m")  # Red error message
@@ -1302,7 +1706,10 @@ def create_parser(interactive_mode: bool = False):
     formatting_group.add_argument("--remove-duplicates", action=OrderedAction, nargs=0, help="Remove duplicate words in the filename.")
     # formatting_group.add_argument("--limit-words", type=int, action=OrderedAction, help="Limit the number of words in the filename to a specified maximum.")
     formatting_group.add_argument("--reverse", action=OrderedAction, nargs=0, help="Reverse the entire filename or just the base name.")
+    formatting_group.add_argument("--add-resolution", nargs=1, action=OrderedAction, choices=['exact', 'tag'], help="Append a resolution or tag to the filename")
+    formatting_group.add_argument("--remove-resolution", nargs=1, action=OrderedAction, choices=['exact', 'tag'], help="Append a resolution or tag to the filename")
     
+    formatting_group.add_argument("--add-image-info", nargs="+", action=OrderedAction, choices=['type', 'bits', ""], help="Append a resolution or tag to the filename")
     formatting_group.add_argument("--ignore-extension", action="store_true", help="Apply formatting to the entire filename, including the extension.")
     return parser
 
