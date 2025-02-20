@@ -10,6 +10,8 @@ import imageio.v3 as iio
 import OpenEXR
 import Imath
 
+from .lib import *
+
 from PIL import Image
 from rich.console import Console
 from rich.table import Table
@@ -60,181 +62,6 @@ RESOLUTION_TAGS = {
     8192: "8K"
 }
 
-def get_texture_resolution(path):
-    image_path = path.resolve()
-    ext = os.path.splitext(image_path)[-1].lower()
-    # print(image_path)
-    try:
-        if ext in [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]:
-            with Image.open(image_path) as img:
-                return img.width, img.height
-
-        elif ext in [".tga", ".dds"]:
-            img = iio.imread(image_path)
-            return img.shape[1], img.shape[0]  # (width, height)
-        
-        elif ext == ".exr":  # Special handling for .exr
-            # print("EXT FILE")
-            # file = OpenEXR.InputFile(image_path)
-            file = OpenEXR.InputFile(path.as_posix())
-            # print("opening file")
-            header = file.header()
-            # print(header)
-            width = header['displayWindow'].max.x - header['displayWindow'].min.x + 1
-            height = header['displayWindow'].max.y - header['displayWindow'].min.y + 1
-            # print(width)
-            # print(height)
-            return width, height
-        
-        else:
-            return "Unsupported format", None
-
-    except Exception as e:
-        return None, None
-        # return "Error", str(e)
-    
-def get_resolution_tag(width, height):
-    """Convert resolution to tag format (_512, _1K, _2K, etc.)."""
-    if width == height and width in RESOLUTION_TAGS:
-        return RESOLUTION_TAGS[width]
-    return f"{width}x{height}"  # Fallback to exact resolution
-
-def get_image_info(path):
-    image_path = path.resolve()
-    ext = os.path.splitext(image_path)[-1].lower()
-
-    try:
-        if ext in [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]:
-            with Image.open(image_path) as img:
-                bit_depth = img.info.get("bits", 8)  # Default to 8 if not found
-                # print(f"{ext}: bit depth: {bit_depth}")
-                # print(f"{img.mode}")
-
-                mode_to_info = {
-                    "1": ("L", 1),    # 1-bit Black & White
-                    "L": ("L", bit_depth),    # 8-bit Grayscale
-                    "P": ("P", 8),    # 8-bit Palette
-                    "RGB": ("RGB", bit_depth), # 24-bit RGB (8 per channel)
-                    "RGBA": ("RGBA", bit_depth), # 32-bit RGBA (8 per channel)
-                    "I": ("I", 32),  # 32-bit Integer
-                    "F": ("F", 32),  # 32-bit Float
-                    "I;16": ("L", 16)
-                }
-                img_type, bits_per_channel = mode_to_info.get(img.mode, (None, None))
-                return img_type, bits_per_channel
-
-        elif ext in [".tga", ".dds"]:
-            img = iio.imread(image_path)
-            
-            # Check the number of channels to determine if it's RGBA or RGB
-            num_channels = img.shape[-1] if len(img.shape) > 2 else 1
-
-            dtype_to_info = {
-                "uint8": (8, "RGB"),
-                "uint16": (16, "RGB"),
-                "float16": (16, "F16"),
-                "float32": (32, "F32"),
-            }
-
-            # Determine bit depth and type from dtype
-            bit_depth, img_type = dtype_to_info.get(str(img.dtype), (None, None))
-
-            # If it's more than 3 channels, we assume it's RGBA
-            if num_channels == 4:
-                img_type = "RGBA"
-
-            return img_type, bit_depth
-        
-        elif ext == ".exr":
-            file = OpenEXR.InputFile(path.as_posix())
-            header = file.header()
-            channels = header['channels']
-            # print(header)
-            # print(channels)
-            
-            # Extract image data type (based on channels and type)
-            channel_types = set()
-            # print("hello")
-            channel_info = {}
-            overall_bit_depth = 0
-            prefix = ""
-            for channel_name, channel_data in channels.items():
-                # print(f"Channel: {channel_name}, Data: {channel_data}")  # Check the channel data type
-                # print(channel_data.type)
-                
-                pixel_type = channel_data.type
-                # print(pixel_type)
-                # print(Imath.PixelType.FLOAT)
-                # print(Imath.PixelType(Imath.PixelType.HALF))
-                if pixel_type == Imath.PixelType(Imath.PixelType.HALF):
-                    # print(f"Channel '{channel_name}' is of type HALF.")
-                    prefix = "F"
-                    bit_depth = 16
-                    # numpy_type = np.float16
-                elif pixel_type == Imath.PixelType(Imath.PixelType.FLOAT):
-                    # print(f"Channel '{channel_name}' is of type FLOAT.")
-                    prefix = "F"
-                    bit_depth = 32
-                    # numpy_type = np.float32
-                elif pixel_type == Imath.PixelType(Imath.PixelType.UINT):
-                    # print(f"Channel '{channel_name}' is of type UINT.")
-                    bit_depth = 32
-                    prefix = "I"
-                    # numpy_type = np.uint32
-                else:
-                    bit_depth = ""
-                    # print(f"Channel '{channel_name}' has an unknown type.")
-                    # numpy_type = None
-                overall_bit_depth = bit_depth
-
-                channel_info[channel_name] = {
-                "bit_depth": bit_depth,
-                # "numpy_type": numpy_type,
-                "pixel_type": pixel_type,
-            }
-
-            # print(channel_info)
-            # print("CHANNEL INFO")
-            # for channel_name, channel_details in channel_info.items():
-                # print(f"Channel: {channel_name}, Data: {channel_details}")  # Check the channel data type
-                # Now check the data_type
-                # if data_type_str == "FLOAT":
-                #     channel_types.add('float32')
-                # elif data_type_str == "HALF":
-                #     channel_types.add('float16')
-                # elif data_type_str == "UINT":
-                #     channel_types.add('uint8')
-                # else:
-                #     print(f"Unknown data type for {channel_name}: {data_type_str}")
-            
-            # print("hello")
-            # print(channel_types)  # Print out the collected types
-            # colorChannels = ['R', 'G', 'B', 'A'] if 'A' in header['channels'] else ['R', 'G', 'B']
-            img_type = 'RGBA' if len(channels) == 4 else 'RGB'
-            bit_depth = overall_bit_depth
-            # If only one type exists, set the img_type and bit depth
-            # if len(channel_types) == 1:
-            #     img_type = 'RGBA' if len(channels) == 4 else 'RGB'
-            #     bit_depth = channel_types.pop()  # Get the data type of the channels
-            # else:
-            #     img_type = "Unknown"
-            #     bit_depth = "Unknown"
-
-            # If you have only 1 channel, it can be grayscale
-            if len(channels) == 1:
-                img_type = "L"
-                # bit_depth = overall_bit_depth
-
-            bit_depth = f"{prefix}{bit_depth}"
-
-            return img_type, bit_depth
-        else:
-            return None, None
-
-    except Exception as e:
-        return "Error", str(e)
-
-
 class OrderedAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         if not hasattr(namespace, 'ordered_args'):
@@ -276,7 +103,6 @@ def extension_type(value):
         raise argparse.ArgumentTypeError(f"Extension must start with a dot (e.g., '.txt').")
     return value.lower()
 
-
 def clean_filename(name, ignore_extension):
     """Remove unwanted characters (e.g., spaces, extra underscores)."""
     if ignore_extension:
@@ -289,34 +115,32 @@ def clean_filename(name, ignore_extension):
         new_name = new_base_name + ext
     return new_name
 
+# def remove_duplicate_words(name, ignore_extension):
+#     """Remove duplicate words or repeated patterns in the filename."""
 
-def remove_duplicate_words(name, ignore_extension):
-    """Remove duplicate words or repeated patterns in the filename."""
+#     # Detect and remove repeated sequences like "testtest" -> "test"
+#     def remove_repeated_patterns(text):
+#         return re.sub(r'(\w+)\1', r'\1', text)  # Only remove full repeated sequences
 
-    # Detect and remove repeated sequences like "testtest" -> "test"
-    def remove_repeated_patterns(text):
-        return re.sub(r'(\w+)\1', r'\1', text)  # Only remove full repeated sequences
+#     # Remove separate duplicate words (e.g., "test test test" -> "test", "test_test_test" -> "test")
+#     def remove_duplicate_whole_words(text):
+#         words = re.split(r'[_\s]+', text)  # Split by underscores or spaces
+#         seen = []
+#         for word in words:
+#             if word not in seen:
+#                 seen.append(word)
+#         return '_'.join(seen)  # Join back with underscores
 
-    # Remove separate duplicate words (e.g., "test test test" -> "test", "test_test_test" -> "test")
-    def remove_duplicate_whole_words(text):
-        words = re.split(r'[_\s]+', text)  # Split by underscores or spaces
-        seen = []
-        for word in words:
-            if word not in seen:
-                seen.append(word)
-        return '_'.join(seen)  # Join back with underscores
+#     if ignore_extension:
+#         name = remove_repeated_patterns(name)  # Fix patterns inside words
+#         new_name = remove_duplicate_whole_words(name)  # Fix duplicate words
+#     else:
+#         base_name, ext = os.path.splitext(name)
+#         base_name = remove_repeated_patterns(base_name)
+#         new_base_name = remove_duplicate_whole_words(base_name)
+#         new_name = new_base_name + ext  # Reattach extension
 
-    if ignore_extension:
-        name = remove_repeated_patterns(name)  # Fix patterns inside words
-        new_name = remove_duplicate_whole_words(name)  # Fix duplicate words
-    else:
-        base_name, ext = os.path.splitext(name)
-        base_name = remove_repeated_patterns(base_name)
-        new_base_name = remove_duplicate_whole_words(base_name)
-        new_name = new_base_name + ext  # Reattach extension
-
-    return new_name
-
+#     return new_name
 
 def limit_word_count(name, max_words, ignore_extension):
     """Limit the number of words in the filename to a specified maximum."""
@@ -913,15 +737,15 @@ def to_title_case(name, ignore_extension):
         new_name = new_base_name + ext
     return new_name
 
-def remove_numbers(name, ignore_extension):
-    """Remove all digits from the filename."""
-    if ignore_extension:
-        new_name = re.sub(r'\d+', '', name)
-    else:
-        base_name, ext = os.path.splitext(name)
-        new_base_name = re.sub(r'\d+', '', base_name)
-        new_name = new_base_name + ext
-    return new_name
+# def remove_numbers(name, ignore_extension):
+#     """Remove all digits from the filename."""
+#     if ignore_extension:
+#         new_name = re.sub(r'\d+', '', name)
+#     else:
+#         base_name, ext = os.path.splitext(name)
+#         new_base_name = re.sub(r'\d+', '', base_name)
+#         new_name = new_base_name + ext
+#     return new_name
 
 def standardize_dates(name, ignore_extension):
     """Convert dates like DD-MM-YYYY or MM-DD-YYYY to YYYY-MM-DD."""
@@ -968,15 +792,15 @@ def replace_word_by_index(name, separator, index, new_text, ignore_extension):
         new_name = new_base_name + ext
     return new_name
 
-def remove_special_characters(name, ignore_extension):
-    """Remove all characters except letters, numbers, dots, and underscores."""
-    if ignore_extension:
-        new_name = re.sub(r'[^a-zA-Z0-9._]', '', name)
-    else:
-        base_name, ext = os.path.splitext(name)
-        new_base_name = re.sub(r'[^a-zA-Z0-9._]', '', base_name)
-        new_name = new_base_name + ext
-    return new_name
+# def remove_special_characters(name, ignore_extension):
+#     """Remove all characters except letters, numbers, dots, and underscores."""
+#     if ignore_extension:
+#         new_name = re.sub(r'[^a-zA-Z0-9._]', '', name)
+#     else:
+#         base_name, ext = os.path.splitext(name)
+#         new_base_name = re.sub(r'[^a-zA-Z0-9._]', '', base_name)
+#         new_name = new_base_name + ext
+#     return new_name
 
 def shorten_filename(name, max_length=255, ignore_extension=False):
     """Shorten the filename to fit within the max length, preserving the extension."""
@@ -990,15 +814,15 @@ def shorten_filename(name, max_length=255, ignore_extension=False):
         name = f"{base_name}{ext}"
     return name
 
-def remove_non_ascii(name, ignore_extension):
-    """Remove all non-ASCII characters from the filename."""
-    if ignore_extension:
-        new_name = ''.join([char for char in name if ord(char) < 128])
-    else:
-        base_name, ext = os.path.splitext(name)
-        new_base_name = ''.join([char for char in base_name if ord(char) < 128])
-        new_name = new_base_name + ext
-    return new_name
+# def remove_non_ascii(name, ignore_extension):
+#     """Remove all non-ASCII characters from the filename."""
+#     if ignore_extension:
+#         new_name = ''.join([char for char in name if ord(char) < 128])
+#     else:
+#         base_name, ext = os.path.splitext(name)
+#         new_base_name = ''.join([char for char in base_name if ord(char) < 128])
+#         new_name = new_base_name + ext
+#     return new_name
 
 from datetime import datetime
 
@@ -1064,79 +888,6 @@ def add_suffix(name, suffix, ignore_extension):
         base_name, ext = os.path.splitext(name)
         new_name = base_name + suffix + ext
     return new_name
-
-def add_resolution(name, values, ignore_extension, path):
-    """Add a suffix to filenames before the extension."""
-    file_path = path.resolve()
-    # print(file_path)
-    width, height = get_texture_resolution(path)
-    type = values[0]
-
-    # print(width)
-    if width is None or height is None:
-        print(f"Skipping {name}: Unsupported format or error.")
-        return name
-    
-    resolution_suffix = get_resolution_tag(width, height) if type == "tag" else f"{width}x{height}"
-
-    if ignore_extension:
-        new_name = f"{name}_{resolution_suffix}"
-    else:
-        base_name, ext = os.path.splitext(name)
-        new_name = f"{base_name}_{resolution_suffix}{ext}"
-    return new_name
-
-def add_image_info(name, values, ignore_extension, path):
-    """Add a suffix to filenames before the extension."""
-    file_path = path.resolve()
-    # print(file_path)
-    img_type, bits_per_channel = get_image_info(path)
-    if img_type is None or bits_per_channel is None:
-        print(f"Skipping {name}: Unsupported format or error.")
-        return name
-    
-    image_info_suffix = f"{img_type}_{bits_per_channel}"
-
-    if ignore_extension:
-        new_name = f"{name}_{image_info_suffix}"
-    else:
-        base_name, ext = os.path.splitext(name)
-        new_name = f"{base_name}_{image_info_suffix}{ext}"
-    return new_name
-
-def remove_resolution(file_name, type, ignore_extension):
-    # TAG_RESOLUTION_REGEX = r'_(\d+K|\d{3,4})'  # _2K, _1K, _512, etc.
-    # TAG_RESOLUTION_REGEX = r'_(2|4|8|16|32|64|128|256|512|1024|2048|4096|8192)(K)?'  # Matches _2K, _4K, etc.
-    # TAG_RESOLUTION_REGEX = r'(^=\D|$)(2|4|8|16|32|64|128|256|512|1024|2048|4096|8192)(K/k)?(?=\D|$)'
-    TAG_RESOLUTION_REGEX = r'(^|[\s_.-])(2|4|8|16|32|64|128|256|512|1024|2048|4096|8192)(K|k)?(?=[\s_.-]|$)'
-
-    EXACT_RESOLUTION_REGEX = r'_(\d{3,4}x\d{3,4})'  # 2048x2048, 1024x512
-    """Remove resolution (tag or exact) from the filename."""
-    # Extract the file name and extension
-    # file_name = file_path.stem  # without extension
-    file_path, file_extension = os.path.splitext(file_name)
-
-    if ignore_extension:
-        file_name_with_extension = f"{file_path}{file_extension}"  # Treat full name (including extension)
-    else:
-        file_name_with_extension = file_path  # Separate name and extension handling
-
-    # print(file_name)
-    type = type[0]
-    # print(type)
-
-    if type == "tag":
-        file_name_with_extension = re.sub(TAG_RESOLUTION_REGEX, '', file_name_with_extension)
-
-    if type == "exact":
-        file_name_with_extension = re.sub(EXACT_RESOLUTION_REGEX, '', file_name_with_extension)
-
-    if ignore_extension:
-        return file_name_with_extension  # Whole name including extension
-    else:
-        # Rebuild the new filename, keeping the extension intact
-        new_file_name = f"{file_name_with_extension}{file_extension}"
-        return new_file_name
 
 def handle_case(name, values, ignore_extension):
     from_case = values[0]
@@ -1209,9 +960,10 @@ def handle_case(name, values, ignore_extension):
         elif to_case == "title":
             new_name = spaces_to_title_case(name, ignore_extension)
     return new_name
-    
+
+
+
 # Words that should always remain capitalized (expand this list if needed)
-SPECIAL_WORDS = {"1K", "2K", "4K", "8K", "16K", "RGBA", "RGB", "L", "F32", "F16", "EXR", "PNG", "JPEG"}
 
 def convert_to_case(name: str, to_case: str, ignore_extension: bool = False) -> str:
     """
@@ -1227,6 +979,7 @@ def convert_to_case(name: str, to_case: str, ignore_extension: bool = False) -> 
         - "space"   → Space Case (words separated by spaces)
         - "title"   → Title Case (Each Word Capitalized, With Special Words Preserved)
     """
+    SPECIAL_WORDS = {"1K", "2K", "4K", "8K", "16K", "RGBA", "RGB", "L", "F32", "F16", "EXR", "PNG", "JPEG"}
 
     def detect_words(text):
         """Extract words from different naming conventions (kebab, snake, camel, pascal)."""
@@ -1264,6 +1017,115 @@ def convert_to_case(name: str, to_case: str, ignore_extension: bool = False) -> 
         raise ValueError(f"Unsupported case: {to_case}")
 
     return new_name + ext  # Reattach extension
+
+# def remove_leading(name, values, ignore_extension):
+#     """Remove specified leading character(s) from the filename."""
+#     char = values[0]
+#     if not char:
+#         return name  # If no character is provided, return the original name
+    
+#     if ignore_extension:
+#         return re.sub(f'^{re.escape(char)}+', '', name)
+
+#     base_name, ext = os.path.splitext(name)
+#     new_base_name = re.sub(f'^{re.escape(char)}+', '', base_name)
+    
+#     return new_base_name + ext
+
+# def remove_trailing(name, values, ignore_extension):
+#     """Remove specified trailing character(s) from the filename."""
+#     char = values[0]
+#     if not char:
+#         return name  # If no character is provided, return the original name
+    
+#     if ignore_extension:
+#         return re.sub(f'{re.escape(char)}+$', '', name)
+
+#     base_name, ext = os.path.splitext(name)
+#     new_base_name = re.sub(f'{re.escape(char)}+$', '', base_name)
+    
+#     return new_base_name + ext
+
+# def remove_repeating(name, values, ignore_extension=False):
+#     """
+#     Remove all occurrences of a given substring except for the one at the specified index.
+    
+#     :param name: The filename to process.
+#     :param substring: The substring to de-duplicate.
+#     :param keep_index: Which occurrence to keep (0-based index).
+#     :param ignore_extension: Whether to ignore the file extension while modifying the filename.
+#     :return: The cleaned filename.
+#     """
+#     substring = values[0]
+#     keep_index = int(values[1]) if len(values) > 1 else 0
+#     if not substring:
+#         return name  # Return original name if no substring provided
+
+#     base_name, ext = os.path.splitext(name)
+    
+#     if ignore_extension:
+#         part_to_modify = name
+#     else:
+#         part_to_modify = base_name  # Only modify the base name
+
+#     matches = list(re.finditer(re.escape(substring), part_to_modify))
+
+#     if len(matches) <= 1:
+#         return name  # No need to modify if there's only one or zero occurrences
+
+#     keep_index = min(keep_index, len(matches) - 1)
+
+#     result = list(name)  # Convert to list to allow modifications
+#     kept_position = matches[keep_index].start()
+
+#     for match in reversed(matches):  
+#         if match.start() != kept_position:
+#             del result[match.start():match.end()]
+
+#     return "".join(result)
+
+# def remove_repeating_connected(name, values, ignore_extension=False):
+#     """
+#     Remove consecutive repetitions of a given character(s) except for the first one.
+    
+#     :param name: The filename to process.
+#     :param values: A list containing the character(s) to de-duplicate and the keep index (optional).
+#     :param ignore_extension: Whether to ignore the file extension while modifying the filename.
+#     :return: The cleaned filename.
+#     """
+#     char = values[0]
+#     if not char:
+#         return name  # Return original name if no character provided
+
+#     # If the user provided a keep_index (default is 0)
+#     keep_index = int(values[1]) if len(values) > 1 else 0
+
+#     base_name, ext = os.path.splitext(name)
+    
+#     # Decide whether to ignore the extension while processing
+#     if ignore_extension:
+#         part_to_modify = name
+#     else:
+#         part_to_modify = base_name  # Only modify the base name
+
+#     # Use regex to remove consecutive occurrences of the character(s)
+#     modified_name = re.sub(rf'{re.escape(char)}+', char, part_to_modify)  # Replace consecutive `char` with a single instance
+
+#     # After modifying, we need to reassemble the final name
+#     if ignore_extension:
+#         return modified_name  # If ignoring the extension, return the whole modified name
+#     else:
+#         return modified_name + ext  # Append the original extension
+
+def flip_case(name, ignore_extension):
+    """Flip uppercase to lowercase and vice versa in the filename."""
+    if ignore_extension:
+        return name.swapcase()  # Swap case for the whole filename
+
+    base_name, ext = os.path.splitext(name)
+    flipped_base_name = base_name.swapcase()  # Swap case only for the base name
+    
+    return flipped_base_name + ext
 
 def process_filename(name, arg, values, args, path=None):
     ignore_extension = args.ignore_extension
@@ -1325,8 +1187,18 @@ def process_filename(name, arg, values, args, path=None):
         name = add_resolution(name, values, ignore_extension, path)
     elif arg == "remove_resolution":
         name = remove_resolution(name, values, ignore_extension)
+    elif arg == "remove_leading":
+        name = remove_leading(name, values, ignore_extension)
+    elif arg == "remove_trailing":
+        name = remove_trailing(name, values, ignore_extension)
+    elif arg == "remove_repeating":
+        name = remove_repeating(name, values, ignore_extension)
+    elif arg == "remove_repeating_connected":
+        name = remove_repeating_connected(name, values, ignore_extension)
     elif arg == "add_image_info":
         name = add_image_info(name, values, ignore_extension, path)
+    elif arg == "case_flip":
+        name = flip_case(name, ignore_extension)
 
     # elif arg == "hash":
     #     name = hash_filename(name, values[0], ignore_extension)
@@ -1663,7 +1535,6 @@ def create_parser(interactive_mode: bool = False):
     renaming_group.add_argument("-ri", "--replace-index", nargs=3, action=ReplaceAction, metavar=('SEPARATOR', 'INDEX', 'NEW_TEXT'), help="Replace the word at INDEX with NEW_TEXT using SEPARATOR.")
     
     renaming_group.add_argument("-I", "--insert-text", action=OrderedAction, nargs=3, metavar=('TEXT', 'POSITION', 'INDEX'), help="Insert TEXT at POSITION in the filename.")
-    # renaming_group.add_argument("-H", "--hash", action=OrderedAction, nargs='?', const='md5', type=str, choices=['md5', 'sha256'], help="Generate a hash of the filename and append or prepend it.")
 
     selection_group = parser.add_argument_group('File Selection Options', 'Options for selecting which files to rename')
     selection_group.add_argument("-t", "--ext", action="append", type=extension_type, help="Only rename files with these extensions (e.g., --ext .txt --ext .jpg).")
@@ -1694,6 +1565,7 @@ def create_parser(interactive_mode: bool = False):
     formatting_group.add_argument("--uppercase", nargs=0, action=OrderedAction, help="Convert filename to uppercase")
     formatting_group.add_argument("--lowercase", nargs=0, action=OrderedAction, help="Convert filename to lowercase")
     formatting_group.add_argument("--title-case", nargs=0, action=OrderedAction, help="Convert filename to Titlecase")
+    formatting_group.add_argument("--case-flip", nargs=0, action=OrderedAction, help="")
     formatting_group.add_argument("--remove-numbers", nargs=0, action=OrderedAction, help="Remove all digits from the filename")
     formatting_group.add_argument("--standardize-dates", nargs=0, action=OrderedAction, help="Convert dates like DD-MM-YYYY to YYYY-MM-DD")
     formatting_group.add_argument("--trim", nargs=0, action=OrderedAction, help="Trim leading and trailing spaces")
@@ -1708,6 +1580,10 @@ def create_parser(interactive_mode: bool = False):
     formatting_group.add_argument("--reverse", action=OrderedAction, nargs=0, help="Reverse the entire filename or just the base name.")
     formatting_group.add_argument("--add-resolution", nargs=1, action=OrderedAction, choices=['exact', 'tag'], help="Append a resolution or tag to the filename")
     formatting_group.add_argument("--remove-resolution", nargs=1, action=OrderedAction, choices=['exact', 'tag'], help="Append a resolution or tag to the filename")
+    formatting_group.add_argument("--remove-leading", nargs=1, action=OrderedAction, help="")
+    formatting_group.add_argument("--remove-repeating", nargs="+", action=OrderedAction, help="")
+    formatting_group.add_argument("--remove-repeating-connected", nargs=1, action=OrderedAction, help="")
+    formatting_group.add_argument("--remove-trailing", nargs=1, action=OrderedAction, help="")
     
     formatting_group.add_argument("--add-image-info", nargs="+", action=OrderedAction, choices=['type', 'bits', ""], help="Append a resolution or tag to the filename")
     formatting_group.add_argument("--ignore-extension", action="store_true", help="Apply formatting to the entire filename, including the extension.")
