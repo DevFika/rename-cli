@@ -7,10 +7,12 @@ import os
 import difflib
 import shutil
 import imageio.v3 as iio
-import OpenEXR
-import Imath
+from prompt_toolkit.application import Application
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout, HSplit, Window, ScrollOffsets
+from prompt_toolkit.widgets import TextArea
 
-from .lib import *
+from lib import *
 
 from PIL import Image
 from rich.console import Console
@@ -46,21 +48,7 @@ INTERACTIVE_MODE_COLOR = MAGENTA
 BOLD = "\033[1m"
 UNDERLINE = "\033[4m"
 
-RESOLUTION_TAGS = {
-    2: "2",
-    4: "4",
-    8: "8",
-    16: "16",
-    32: "32",
-    64: "64",
-    128: "128",
-    256: "256",
-    512: "512",
-    1024: "1K",
-    2048: "2K",
-    4096: "4K",
-    8192: "8K"
-}
+
 
 class OrderedAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -1324,6 +1312,22 @@ def rename_files(directory, args, extensions, target_path):
             
             rename_file(path, args, target_path)
 
+selected_index = 0
+kb = KeyBindings()
+@kb.add("up")
+def move_up(event):
+    global selected_index
+    if selected_index > 0:
+        selected_index -= 1
+        update_display()
+
+@kb.add("down")
+def move_down(event):
+    global selected_index
+    if selected_index < len(file_list) - 1:
+        selected_index += 1
+        update_display()
+        
 def pretty_print_preview(files_to_process, base_directory="."):
     console = Console()
 
@@ -1331,6 +1335,8 @@ def pretty_print_preview(files_to_process, base_directory="."):
     tree = Tree(f":open_file_folder: [bold underline]{base_directory}[/bold underline]", guide_style="bold bright_blue")
 
     folder_nodes = {base_directory: tree}
+
+    index = 0
 
     for file, names in files_to_process.items():
         file_path = Path(file).resolve()
@@ -1369,11 +1375,15 @@ def pretty_print_preview(files_to_process, base_directory="."):
         elif file_extension in [".zip", ".tar", ".gz"]:
             file_icon = "📦 "
 
+
         file_display = Text(f"{file_icon}")
+        if index == selected_index:
+            file_display.append("Selection")
         file_display.append(highlighted_original)
         file_display.append(" → ", style="white")
         file_display.append(highlighted_new)
         # file_display.append(f" ({decimal(file_size)})", style="blue")
+        index += 1
 
         parent_node.add(file_display)
     
