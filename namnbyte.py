@@ -78,7 +78,7 @@ class ToggleTree(Tree[bool]):
     def action_toggle_collapse_all(self):
         self.root.collapse_all()
 
-class FileRenamerApp(App[None]):
+class Namnbyte(App[None]):
     BINDINGS = [
         Binding("k", "space", "Expand or collapse all", show=True),
     ]
@@ -89,17 +89,6 @@ class FileRenamerApp(App[None]):
         super().__init__()
         self.current_directory = path
         self.data_manager = DataManager(path)
-
-        self.data = {
-            "folders": {},
-            "summary": {
-                "folders_count": 0,
-                "enabled_folders_count": 0,
-                "files_count": 0,
-                "enabled_files_count": 0,
-                "total_size": 0,
-            }
-        }
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -144,7 +133,7 @@ class FileRenamerApp(App[None]):
 
         # Now filter and display files from enabled folders in the data table
         info_display = self.query_one("#info_display", Static)
-        self.data_manager.data["summary"][""]
+        # self.data_manager.data["summary"][""]
         info_display.update("Updated info text")
         file_table = self.query_one(DataTable)
         file_table.clear()
@@ -172,4 +161,4 @@ class FileRenamerApp(App[None]):
         return self.data_manager.get_enabled_folders(node)
     
 if __name__ == "__main__":
-    FileRenamerApp(path=Path(".")).run()
+    Namnbyte(path=Path(".")).run()
