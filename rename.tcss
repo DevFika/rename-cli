@@ -1,0 +1,79 @@
+/* The top level dialog (a Container) */
+Grid {
+    grid-size: 2 1;
+    grid-columns: 30% 70%;
+}
+
+#right_panel {
+    height: 100%;
+    layout: vertical;
+}
+
+#output_display {
+    height: 1;
+    # height: 2;
+    # column-span: 1;
+}
+
+#info_display {
+    height: 20%;
+    background: black;
+    border: round yellow;
+    # column-span: 1;
+}
+
+#tree_display {
+    border: round yellow;
+    background: black;
+    
+    # row-span: 2;
+    # height: 50%;
+}
+
+#right_sub_panel {
+    border: round yellow;
+    background: black;
+    height: 6;
+}
+
+#file_table {
+    height: 1fr;
+    border: round yellow;
+    border-left: round red;
+    scrollbar-color: red;
+    # row-span: 2;
+    # column-span: 2;
+}
+
+#input_command {
+    height: 3;
+    # row-span: 2;
+}
+
+#dialog {
+    height: 100%;
+    margin: 4 8;
+    background: $panel;
+    color: $text;
+    border: tall $background;
+    padding: 1 2;
+}
+
+/* The button class */
+Button {
+    width: 1fr;
+}
+
+/* Matches the question text */
+.question {
+    text-style: bold;
+    height: 100%;
+    content-align: center middle;
+}
+
+/* Matches the button container */
+.buttons {
+    width: 100%;
+    height: auto;
+    dock: bottom;
+}

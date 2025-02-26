@@ -1,18 +1,21 @@
 import os
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Tree, DataTable
+from textual.widgets import Header, Footer, Tree, DataTable, Placeholder, Input, Static, Label, TextArea
 from pathlib import Path
 from textual.events import Click
 from textual.coordinate import Coordinate
 from textual.geometry import Offset
 from textual.binding import Binding
-from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
+from textual.containers import Container, Vertical, Horizontal, ScrollableContainer, Grid
 
 from lib import DataManager
 
-# ✅
-ENABLED_FOLDER = f"[green]■[/green]"
-DISABLED_FOLDER = f"[red]■[/red]"
+# 📂
+# ✅☑️🔳🔳☐
+ENABLED_FOLDER = f"[green]✅📂[/green]"
+DISABLED_FOLDER = f"[red]🔳📂[/red]"
+# ENABLED_FOLDER = f"[green]■📂[/green]"
+# DISABLED_FOLDER = f"[red]■📂[/red]"
 class ToggleTree(Tree[bool]):
     BINDINGS = [
     Binding("a", "toggle_expand_all", "Expand all", show=True,),
@@ -21,12 +24,11 @@ class ToggleTree(Tree[bool]):
     ]
 
     def on_mount(self):
+        super().on_mount()
         self.root.is_enabled = True
         self.root.path = Path(".")
-        self.styles.border = ("round", "yellow")
-        self.border_title = "Folder Tree"
-        self.styles.background = "black"
-        return super().on_mount()
+        self.border_title = "Folders"
+        self.root.expand()
     
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         event.prevent_default()
@@ -80,6 +82,9 @@ class FileRenamerApp(App[None]):
     BINDINGS = [
         Binding("k", "space", "Expand or collapse all", show=True),
     ]
+
+    CSS_PATH = "rename.tcss"
+
     def __init__(self, path: Path):
         super().__init__()
         self.current_directory = path
@@ -100,35 +105,27 @@ class FileRenamerApp(App[None]):
         yield Header()
         yield Footer()
 
-        yield Horizontal(
-            Container(
-                ScrollableContainer(
-                    ToggleTree("📂 Current Directory", id="tree"),
-                    id="folder_container"
-                ),
-                id="left_panel"
-            ),
-            Container(
-                ScrollableContainer(
-                    Vertical(
-                        DataTable(id="file_table"),
-                    ),
-                    id="file_container"
-                ),
-                id="right_panel"
-            ),
-            id="main_container"
-        )
-        # yield ToggleTree("📂 Current Directory", id="tree")
+        with Grid():
+            with ScrollableContainer(id="left_panel"):
+                yield ToggleTree("✅📂 Current Directory", id="tree_display")
+                yield Static(id="info_display", expand=True)
+            with Vertical(id="right_panel"):
+                yield DataTable(id="file_table")
+                with Vertical(id="right_sub_panel"):
+                    yield Label(id="output_display", expand=True)
+                    yield Input(id="input_command")
+
 
     def on_mount(self) -> None:
         tree = self.query_one(ToggleTree)
+        data_table = self.query_one(DataTable)
+        data_table.border_title = "Files"
         # tree.show_root = False
         tree.guide_depth = 2
         self.data_manager.populate_tree(tree.root, self.current_directory)
         # self.populate_tree(tree.root, self.current_directory)
         tree.focus()
-        self.query_one("#left_panel").styles.width = "25%"
+        # self.query_one("#left_panel").styles.width = "25%"
         self.initialize_file_table()
         self.update_file_table() 
         # print(tree.get_bindings())  # Print registered bindings for debugging
@@ -146,8 +143,12 @@ class FileRenamerApp(App[None]):
         # enabled_folders = self.get_enabled_folders(tree.root)
 
         # Now filter and display files from enabled folders in the data table
+        info_display = self.query_one("#info_display", Static)
+        self.data_manager.data["summary"][""]
+        info_display.update("Updated info text")
         file_table = self.query_one(DataTable)
         file_table.clear()
+        # info_display
 
         # Now display files based on the central data structure
         for folder_data in self.data_manager.data["folders"].values():
