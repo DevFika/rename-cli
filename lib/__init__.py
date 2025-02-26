@@ -9,3 +9,5 @@ from .remove import (
     remove_trailing, 
     remove_non_ascii
 )
+
+from .data_manager import DataManager

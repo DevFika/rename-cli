@@ -2,6 +2,9 @@
 from pathlib import Path
 from typing import Dict
 
+ENABLED_FOLDER = f"[green]■[/green]"
+DISABLED_FOLDER = f"[red]■[/red]"
+
 class DataManager:
     def __init__(self, current_directory: Path):
         self.current_directory = current_directory
