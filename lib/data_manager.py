@@ -10,6 +10,7 @@ class DataManager:
     def __init__(self, current_directory: Path):
         self.current_directory = current_directory
         self._observers = []
+        self.rel_path_to_file = {}
         self.data = {
             "folders": defaultdict(lambda: {"is_enabled": True, "files": []}),
             "summary": {
@@ -94,11 +95,15 @@ class DataManager:
 
     def set_file_name(self, folder_path: str, old_name: str, new_name: str) -> None:
         """Change the name of a file."""
+        print(self.data)
         folder_data = self.data["folders"].get(folder_path)
+        print(folder_data)
         if folder_data:
             file_data = next((f for f in folder_data["files"] if f["name"] == old_name), None)
+            print(file_data)
             if file_data:
                 file_data["new_name"] = new_name
+                print(f"file: {file_data}, old_name: {old_name}, new_name: {new_name}")
                 self.notify_observers({"file": file_data, "old_name": old_name, "new_name": new_name})
                 self.recalculate_summary(updated_data={"file": file_data})
     
