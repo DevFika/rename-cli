@@ -43,7 +43,7 @@ class ToggleTree(Tree[bool]):
             self.app.update_folder_data(event.node)  # Update data structure
 
         # Recalculate the summary and update the file table
-        self.app.recalculate_summary()  # Update the summary
+        # self.app.recalculate_summary()  # Update the summary
         self.app.update_file_table()    # Update the file table
 
 
@@ -63,17 +63,42 @@ class ToggleTree(Tree[bool]):
         self.root.expand_all()
 
     def _disable_node(self, node):
-        node.is_enabled = False
-        self.update_node_label(node)
+        # If the node is already disabled, skip it
+        if node.is_enabled:
+            node.is_enabled = False
+            self.update_node_label(node)  # Update label for the current node
+
+        # Disable all children in the current node
+        for child in node.children:
+            # Skip if already disabled
+            if child.is_enabled:
+                child.is_enabled = False
+                self.update_node_label(child)  # Update label for the child
 
         self.app.update_folder_data(node)
 
-        for child in node.children:
-            self._disable_node(child)
+    # def _disable_node(self, node):
+    #     node.is_enabled = False
+    #     self.update_node_label(node)
+
+    #     for child in node.children:
+    #         self._disable_node(child)
+
+    #     self.app.update_folder_data(node)
 
     def action_disable_all(self):
-        self._disable_node(self.root)
-        self.app.update_file_table()
+        # Disable all nodes at once (root and all descendants)
+        nodes_to_disable = [self.root]  # Start with root node
+        while nodes_to_disable:
+            node = nodes_to_disable.pop()
+            self._disable_node(node)
+            # Add all child nodes to the stack
+            nodes_to_disable.extend(node.children)
+        self.app.update_file_table()  # After disabling all nodes, update the file table
+
+    # def action_disable_all(self):
+    #     self._disable_node(self.root)
+    #     self.app.update_file_table()
 
     def action_toggle_collapse_all(self):
         self.root.collapse_all()
@@ -133,8 +158,16 @@ class Namnbyte(App[None]):
 
         # Now filter and display files from enabled folders in the data table
         info_display = self.query_one("#info_display", Static)
-        # self.data_manager.data["summary"][""]
-        info_display.update("Updated info text")
+        amount_of_folders = self.data_manager.get_folder_count()
+        amount_of_enabled_folders = self.data_manager.get_enabled_folder_count()
+        amount_of_files = self.data_manager.get_file_count()
+        amount_of_enabled_files = self.data_manager.get_enabled_file_count()
+        info_display.update(
+            f"Folders:\n"
+            f"  Enabled: {amount_of_enabled_folders} / Total: {amount_of_folders}\n\n"
+            f"Files:\n"
+            f"  Enabled: {amount_of_enabled_files} / Total: {amount_of_files}"
+        )
         file_table = self.query_one(DataTable)
         file_table.clear()
         # info_display
