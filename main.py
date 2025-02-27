@@ -10,6 +10,7 @@ from textual.containers import Container, Vertical, Horizontal, ScrollableContai
 
 from lib import DataManager
 from lib import ToggleTree
+from lib import InfoDisplay
 
 class Namnbyte(App[None]):
     BINDINGS = [
@@ -43,7 +44,8 @@ class Namnbyte(App[None]):
             with ScrollableContainer(id="left_panel"):
                 self.toggle_tree = ToggleTree(label="✅📂 Current Directory", id="tree_display", data_manager=self.data_manager, directory_path=self.current_directory)
                 yield self.toggle_tree
-                yield Static(id="info_display", expand=True)
+                self.info_display = InfoDisplay(data_manager=self.data_manager, id="info_display", expand=True)
+                yield self.info_display
             with Vertical(id="right_panel"):
                 self.data_table =  DataTable(id="file_table")
                 yield self.data_table
@@ -51,7 +53,6 @@ class Namnbyte(App[None]):
                     yield Label(id="output_display", expand=True)
                     self.input_field = Input(id="input_command")
                     yield self.input_field
-
 
     def on_mount(self) -> None:
         tree = self.toggle_tree
@@ -61,7 +62,6 @@ class Namnbyte(App[None]):
         tree.focus()
         self.initialize_file_table()
         self.populate_file_table()
-        self.update_info_display()
 
     def initialize_file_table(self):
         file_table = self.data_table
@@ -98,7 +98,6 @@ class Namnbyte(App[None]):
             return "✅" if file_data[key] else "❌"
         return file_data[key]
 
-
     def update_file_table(self):
         # self.update_info_display()
         file_table = self.data_table
@@ -108,25 +107,6 @@ class Namnbyte(App[None]):
             if folder_data["is_enabled"]:
                 for file_data in folder_data["files"]:
                     self._add_file_row(file_data)
-
-
-    def update_folder_data(self, node):
-        """Delegate folder data update to the FolderDataManager."""
-        self.data_manager.update_folder_data(node)
-
-    def update_info_display(self):
-        info_display = self.query_one("#info_display", Static)
-        amount_of_folders = self.data_manager.get_folder_count()
-        amount_of_enabled_folders = self.data_manager.get_enabled_folder_count()
-        amount_of_files = self.data_manager.get_file_count()
-        amount_of_enabled_files = self.data_manager.get_enabled_file_count()
-
-        info_display.update(
-            f"Folders:\n"
-            f"  Enabled: {amount_of_enabled_folders} / Total: {amount_of_folders}\n\n"
-            f"Files:\n"
-            f"  Enabled: {amount_of_enabled_files} / Total: {amount_of_files}"
-        )
 
     def get_enabled_folders(self, node):
         """Get enabled folders from FolderDataManager."""
@@ -141,7 +121,8 @@ class Namnbyte(App[None]):
             file_data = updated_data["file"]
             self.update_file_table()  # Refresh the table to reflect the file data changes
         if "summary" in updated_data:
-            self.update_info_display()  # Refresh the info display if the summary changes
+            self.info_display.refresh_display()
+            # self.update_info_display()  # Refresh the info display if the summary changes
         if "batch_update_done" in updated_data:
             self.update_file_table()  # Refresh the file table after a batch update
 

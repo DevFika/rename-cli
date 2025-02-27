@@ -60,7 +60,7 @@ class ToggleTree(Tree[bool]):
         if node.is_enabled != enable:  # Only update if the state is different
             node.is_enabled = enable
             self.update_node_label(node)  # Update label for the current node
-            self.app.update_folder_data(node)
+            self.data_manager.update_folder_data(node)
         
         # Recurse through all child nodes
         for child in node.children:
