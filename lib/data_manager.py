@@ -10,7 +10,7 @@ class DataManager:
     def __init__(self, current_directory: Path):
         self.current_directory = current_directory
         self._observers = []
-        self.rel_path_to_file = {}
+        
         self.data = {
             "folders": defaultdict(lambda: {"is_enabled": True, "files": []}),
             "summary": {
@@ -82,6 +82,17 @@ class DataManager:
             
             self.notify_observers({"folder": folder_data})  # Notify observers
             self.recalculate_summary(updated_data={"folder": folder_data})
+    
+    def toggle_file_enabled(self, folder_path: str, file_name: str) -> None:
+        """Toggle the 'is_enabled' status of a specific file within a folder."""
+        folder_data = self.data["folders"].get(folder_path)
+        if folder_data:
+            file_data = next((f for f in folder_data["files"] if f["name"] == file_name), None)
+            if file_data:
+                file_data["is_enabled"] = not file_data["is_enabled"]
+                self.notify_observers({"file": file_data})
+                self.recalculate_summary(updated_data={"file": file_data})
+
 
     def set_file_enabled(self, folder_path: str, file_name: str, is_enabled: bool) -> None:
         """Enable or disable a specific file within a folder."""
@@ -202,6 +213,7 @@ class DataManager:
             "rel_path": str(file.relative_to(self.current_directory)),
             "abs_path": str(file),
             "file_ext": ".temp",
+            "folder_path": parent_path,
         }
         self.data["folders"][parent_path]["files"].append(file_data)
 

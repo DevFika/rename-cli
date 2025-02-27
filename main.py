@@ -26,15 +26,6 @@ class Namnbyte(App[None]):
         self.data_manager = DataManager(path)
         self.data_manager.add_observer(self)
 
-        self.column_mapping = [
-            {"name": " ", "key": "is_enabled"},
-            {"name": "Extension", "key": "file_ext"},
-            {"name": "Current Name", "key": "current_name"},
-            {"name": "New Name", "key": "new_name"},
-            {"name": "Size", "key": "size"},
-            {"name": "Path", "key": "rel_path"},
-        ]
-
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
@@ -46,7 +37,7 @@ class Namnbyte(App[None]):
                 self.info_display = InfoDisplay(data_manager=self.data_manager, id="info_display", expand=True)
                 yield self.info_display
             with Vertical(id="right_panel"):
-                self.data_table = FileTable(data_manager=self.data_manager, column_mapping=self.column_mapping, id="file_table")
+                self.data_table = FileTable(data_manager=self.data_manager, id="file_table")
                 yield self.data_table
                 with Vertical(id="right_sub_panel"):
                     yield Label(id="output_display", expand=True)
@@ -76,8 +67,8 @@ class Namnbyte(App[None]):
             self.data_table.populate_table()  # Refresh the file table after a batch update
 
     def action_test(self) -> None:
-        print("Lets do action test")
-        self.data_manager.set_file_name("test", ".gitignore", "pop")
+        print("Starting action test...")
+        self.data_manager.set_file_name("test", "2", "pop")
 
     def action_focus_tree(self) -> None:
         """Focus on the tree view panel."""
