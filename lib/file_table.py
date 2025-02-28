@@ -5,30 +5,39 @@ from textual.app import ComposeResult
 from textual import on
 from lib import DataManager
 from typing import Any
+from rich.text import Text
+import difflib
 
 from .columns import FileTableColumns
 
+def highlight_changes(original, new):
+    """Highlight differences between original and new name using rich.Text."""
+    matcher = difflib.SequenceMatcher(None, original, new)
+    
+    highlighted_original = Text()
+    highlighted_new = Text()
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            highlighted_original.append(original[i1:i2], style="dim")
+            highlighted_new.append(new[j1:j2])
+        elif tag == "replace" or tag == "insert":
+            highlighted_new.append(new[j1:j2], style="bold green")
+            highlighted_original.append(original[i1:i2], style="bold red")
+        elif tag == "delete":
+            highlighted_original.append(original[i1:i2], style="bold red")
+
+    return highlighted_original, highlighted_new
 
 class FileTable(DataTable):
-    
+    CSS_PATH = "../assets/file_table.tcss"
     def __init__(self, data_manager: DataManager, **kwargs):
         super().__init__(**kwargs)
         self.data_manager = data_manager
         self.row_metadata = {}
         self.column_sort_order = {}
         self.column_mapping = FileTableColumns.get_all_columns()
-        # self.column_mapping = [
-        #     {"name": " ", "key": "is_enabled"},
-        #     {"name": "Extension", "key": "file_ext"},
-        #     {"name": "Current Name", "key": "current_name"},
-        #     {"name": "New Name", "key": "new_name"},
-        #     {"name": "Size", "key": "size"},
-        #     {"name": "Path", "key": "rel_path"},
-        #     {"name": "Folder Path", "key": "folder_path"},
-        # ]
         self.initialize_table()
-
-    CSS_PATH = "assets/file_table.tcss"
 
     def get_column_index_by_key(self, column_key):
         """Helper function to get column index by key using the Enum."""
@@ -66,7 +75,16 @@ class FileTable(DataTable):
         is_enabled_value = self.get_cell_at((current_row, is_enabled_index))
         current_name_value = self.get_cell_at((current_row, current_name_index))
         folder_value = self.get_cell_at((current_row, folder_path_column_index))
-
+        if isinstance(folder_value, Text):
+            folder_value = folder_value.plain
+        if isinstance(current_name_value, Text):
+            current_name_value = current_name_value.plain
+        if isinstance(rel_path_value, Text):
+            rel_path_value = rel_path_value.plain
+        if isinstance(is_enabled_value, Text):
+            is_enabled_value = is_enabled_value.plain
+        if isinstance(cell_value, Text):
+            cell_value = cell_value.plain
         # Print the message and the retrieved values
         print(message)
         print(f"Rel Path: {rel_path_value}")
@@ -75,6 +93,7 @@ class FileTable(DataTable):
 
         if selected_column_index == is_enabled_index:
             print("Lets toggle file")
+
             self.data_manager.toggle_file_enabled(folder_value, current_name_value)
         elif selected_column_index == new_name_index:
             print("Lets push edit cell")
@@ -133,22 +152,87 @@ class FileTable(DataTable):
                 self.add_file_row(file_data)
 
     def add_file_row(self, file_data):
-        row = [self.get_file_data(file_data, column["key"]) for column in self.column_mapping]
+        # Create a list to store the row, applying highlight changes to current_name and new_name
+        row = []
+        
+        for column in self.column_mapping:
+            # Get the value for the current column
+            value = self.get_file_data(file_data, column["key"])
+            
+            # If the column is either current_name or new_name, apply highlighting
+            if column["key"] == "current_name":
+                original_name = value
+                new_name = file_data.get("new_name", "")
+                highlighted_current, _ = highlight_changes(original_name, new_name)
+                row.append(highlighted_current)  # Add the highlighted current name
+            elif column["key"] == "new_name":
+                original_name = file_data.get("current_name", "")
+                new_name = value
+                _, highlighted_new = highlight_changes(original_name, new_name)
+                row.append(highlighted_new)  # Add the highlighted new name
+            else:
+                # For other columns, add the value as plain text
+                row.append(Text(str(value)))
+
+        # Apply additional classes for styling if necessary
         classes = []
         if not file_data.get("is_enabled"):
             classes.append("disabled")
         if file_data.get("current_name") != file_data.get("new_name"):
             classes.append("pending-change")
+
+        # Add the row to the table with the appropriate classes
         self.add_row(*row, key=file_data["rel_path"])
 
+    # def old_add_file_row(self, file_data):
+    #     row = [
+    #         Text(str(self.get_file_data(file_data, column["key"])), style="italic #03AC13", justify="right")
+    #         for column in self.column_mapping
+    #     ]
+    #     # row = [self.get_file_data(file_data, column["key"]) for column in self.column_mapping]
+    #     classes = []
+    #     if not file_data.get("is_enabled"):
+    #         classes.append("disabled")
+    #     if file_data.get("current_name") != file_data.get("new_name"):
+    #         classes.append("pending-change")
+    #     self.add_row(*row, key=file_data["rel_path"])
+
     def update_file_row(self, file_data):
+        """Update a file row with highlighted changes for current_name and new_name."""
+        rel_path = file_data["rel_path"]
+        if rel_path not in self.rows:
+            return
+
+        # Iterate over each column to update the relevant cells
+        for column_index, column in enumerate(self.column_mapping):
+            value = self.get_file_data(file_data, column["key"])
+
+            # Apply highlighting to the columns that have current_name or new_name
+            if column["key"] == "current_name":
+                original_name = value
+                new_name = file_data.get("new_name", "")
+                highlighted_current, _ = highlight_changes(original_name, new_name)
+                # Use update_cell to update the current_name cell with highlighted text
+                self.update_cell(rel_path, str(column_index), highlighted_current)
+            
+            elif column["key"] == "new_name":
+                original_name = file_data.get("current_name", "")
+                new_name = value
+                _, highlighted_new = highlight_changes(original_name, new_name)
+                # Use update_cell to update the new_name cell with highlighted text
+                self.update_cell(rel_path, str(column_index), highlighted_new)
+            
+            else:
+                # For other columns, update the cell without highlighting
+                self.update_cell(rel_path, str(column_index), Text(str(value)))
+
+    def old_update_file_row(self, file_data):
         rel_path = file_data["rel_path"]
         if rel_path not in self.rows:
             return
         for column_index, column in enumerate(self.column_mapping):
             print(f"row key {rel_path}, column key {column_index}")
             self.update_cell(rel_path, str(column_index), self.get_file_data(file_data, column["key"]))
-        # self.update_row_state(rel_path, file_data)
 
     def remove_file_row(self, rel_path: str):
         if rel_path in self.rows:
@@ -175,10 +259,13 @@ class FileTable(DataTable):
         """Generic sort handler for any column by index, not by key."""
 
         def get_sort_key(value):
+            real_value = value
+            if isinstance(value, Text):
+                real_value = value.plain
             # Optional: Custom sort for "is_enabled" column
             if column_index == 0:  # Column 0 is "is_enabled"
                 return value == "✅"  # ✅ = True, ❌ = False
-            return value
+            return real_value
 
         reverse = self.column_sort_order.get(column_index, False)
         self.column_sort_order[column_index] = not reverse
@@ -198,44 +285,6 @@ class FileTable(DataTable):
                 return index
         return None
     
-    def update_row_state(self, rel_path: str, file_data: dict):
-        """Track state and (potentially) apply styling."""
-        classes = []
-        if not file_data.get("is_enabled", True):
-            classes.append("disabled")
-        if file_data.get("current_name") != file_data.get("new_name"):
-            classes.append("pending-change")
-
-        self.row_metadata[rel_path] = classes
-        self.apply_row_styles(rel_path, classes)
-
-    def apply_row_styles(self, rel_path, classes):
-        """You can't set row classes directly, so you need to manually apply to each cell."""
-        if rel_path not in self.rows:
-            return
-
-        # For each cell in the row, update the cell's styles directly (or content if needed)
-        row_data = self.get_row(rel_path)
-
-        for column_key, cell_value in row_data.items():
-            styled_value = self.apply_cell_styling(cell_value, classes)
-            self.update_cell(rel_path, column_key, styled_value)
-
-    
-    def apply_cell_styling(self, value, classes):
-        """Wrap the value in styled Text or similar (if Textual styles were used)."""
-        from textual.widgets import DataTable
-        from rich.text import Text
-
-        text = Text(str(value))
-
-        if "disabled" in classes:
-            text.stylize("dim")  # Gray out text if disabled
-        if "pending-change" in classes:
-            text.stylize("bold yellow")  # Highlight for pending changes
-
-        return text
-    
 
 from textual.message import Message
 
@@ -246,52 +295,3 @@ class EditCellRequested(Message):
         self.row = row
         self.column = column
         self.value = value
-
-# class EditCellScreen(ModalScreen):
-#     def __init__(
-#         self,
-#         cell_value: Any,
-#         name: str | None = None,
-#         id: str | None = None,
-#         classes: str | None = None,
-#     ) -> None:
-#         super().__init__(
-#             name=name,
-#             id=id,
-#             classes=classes,
-#         )
-#         self.cell_value = cell_value
-
-#     def compose(self) -> ComposeResult:
-#         yield Input()
-
-#     def on_mount(self) -> None:
-#         cell_input = self.query_one(Input)
-#         cell_input.value = str(self.cell_value)
-
-#         cell_input.focus()
-
-#     def on_click(self, event: Click) -> None:
-#         clicked, _ = self.get_widget_at(event.screen_x, event.screen_y)
-#         # Close the screen if the user clicks outside the modal content
-#         # (i.e. the darkened background)
-#         if clicked is self:
-#             self.app.pop_screen()
-
-#     def on_input_submitted(self, event: Input.Submitted) -> None:
-#         main_screen = self.app.get_screen("main")
-
-#         table = main_screen.query_one(DataTable)
-#         table.update_cell_at(
-#             table.cursor_coordinate,
-#             event.value,
-#             update_width=True,
-#         )
-
-#         message = (
-#             f"New value of cell at {table.cursor_coordinate}"
-#             f" is {event.value} and type {type(event.value)}"
-#         )
-#         # main_screen.query_one(RichLog).write(message)
-
-#         self.app.pop_screen()

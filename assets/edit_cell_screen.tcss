@@ -1,0 +1,14 @@
+/* This is for the modal window itself */
+EditCellScreen {
+    align: center middle;
+}
+
+#edit_cell_input {
+    width: 50%;  /* Adjust width as needed */
+    height: 3;  /* Give it more height for a larger, fancier look */
+    border: panel #d626f1;
+    background:#2e2e2e;  /* Light grey background */
+    color:#ffffff
+}
+
+# background:#d626f1;  /* Light grey background */

@@ -1,8 +1,0 @@
-DataTable > .disabled {
-    background: #333;
-    color: #888;
-}
-
-DataTable > .pending-change {
-    background: rgba(255, 223, 186, 0.6);
-}

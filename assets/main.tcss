@@ -1,4 +1,3 @@
-/* The top level dialog (a Container) */
 Grid {
     grid-size: 2 1;
     grid-columns: 30% 70%;
@@ -11,23 +10,29 @@ Grid {
 
 #output_display {
     height: 1;
-    # height: 2;
-    # column-span: 1;
 }
 
 #info_display {
     height: 20%;
     background: black;
     border: round yellow;
-    # column-span: 1;
+}
+
+#info_display:focus {
+    background: black;
+    border: round red;
+    background-tint: white 00%
 }
 
 #tree_display {
     border: round yellow;
     background: black;
-    
-    # row-span: 2;
-    # height: 50%;
+}
+
+#tree_display:focus {
+    background: black;
+    border: round red;
+    background-tint: white 00%
 }
 
 #right_sub_panel {
@@ -36,18 +41,27 @@ Grid {
     height: 6;
 }
 
+#right_sub_panel:focus {
+    border: round red;
+    background: black;
+    height: 6;
+}
+
 #file_table {
     height: 1fr;
+    background: black;
     border: round yellow;
     border-left: round red;
     scrollbar-color: red;
-    # row-span: 2;
-    # column-span: 2;
+}
+#file_table:focus {
+    background: black;
+    border: round red;
+    background-tint: white 00%
 }
 
 #input_command {
     height: 3;
-    # row-span: 2;
 }
 
 #dialog {

@@ -114,7 +114,6 @@ class DataManager:
             print(file_data)
             if file_data:
                 file_data["new_name"] = new_name
-                print(f"file: {file_data}, old_name: {old_name}, new_name: {new_name}")
                 self.notify_observers({"file": file_data, "old_name": old_name, "new_name": new_name})
                 self.recalculate_summary(updated_data={"file": file_data})
     

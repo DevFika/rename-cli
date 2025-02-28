@@ -1,0 +1,40 @@
+/* Style for the entire DataTable */
+FileTable {
+    background:#ffffff;  /* Set the background of the entire table */
+    color:#ffffff;  /* Set the font color of the table */
+}
+
+DataTable {
+    background:#ffdfba;  /* Set the background of the entire table */
+    color:#ffffff;  /* Set the font color of the table */
+}
+
+/* Style for the header of the DataTable */
+FileTable thead {
+    background: #ffffff;  /* Darker background for header */
+    color: #ffdfba;  /* Lighter color for the header text */
+}
+
+/* Style for the rows in the DataTable */
+FileTable tbody tr {
+    background: #ffdfba;  /* Dark background for rows */
+    color: #ffffff;  /* Light font color for row text */
+}
+
+/* Style for specific rows with the 'disabled' class */
+FileTable tbody tr.disabled {
+    background: #ffffff;  /* Darker background for disabled rows */
+    color: #ffffff;  /* Gray font color for disabled rows */
+}
+
+/* Style for rows with pending changes */
+FileTable tbody tr.pending-change {
+    background: #ffffff;  /* Yellowish background for pending changes */
+    color: #ffffff;  /* Black font color for better contrast */
+}
+
+/* Hover effect for rows */
+FileTable tbody tr:hover {
+    background: #ffffff;  /* Lighter background on hover */
+    color: #ffffff;  /* White font color on hover */
+}

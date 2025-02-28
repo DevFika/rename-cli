@@ -11,8 +11,11 @@ from textual.binding import Binding
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer, Grid
 from typing import Callable
 
+
+from rich.text import Text
+
 from lib import DataManager, ToggleTree, InfoDisplay, FileTable, EditCellRequested
-from lib import FileTableColumns
+from lib import FileTableColumns, EditCellScreen
 
 class Namnbyte(App[None]):
     BINDINGS = [
@@ -63,9 +66,7 @@ class Namnbyte(App[None]):
             self.data_table.populate_table()  # Refresh the table to reflect the folder data changes
         if "file" in updated_data:
             file_data = updated_data["file"]
-            # self.data_table.populate_table()  # Refresh the table to reflect the folder data changes
             self.data_table.update_file_row(file_data)
-            # self.data_table.populate_table()  # Refresh the table to reflect the file data changes
         if "summary" in updated_data:
             self.info_display.refresh_display()
         if "batch_update_done" in updated_data:
@@ -104,35 +105,19 @@ class Namnbyte(App[None]):
             folder_path = event.sender.get_cell_at((event.row, folder_path_column_index))  # Get the folder path
             old_name = event.sender.get_cell_at((event.row, current_name_column_index))  # Get the old name
 
-            self.data_manager.set_file_name(folder_path, old_name, new_value)
+            if isinstance(folder_path, Text):
+                folder_path = folder_path.plain
+
+            if isinstance(old_name, Text):
+                old_name = old_name.plain
+
+            value = new_value
+            if isinstance(value, Text):
+                value = value.plain
+
+            self.data_manager.set_file_name(folder_path, old_name, value)
 
         self.push_screen(EditCellScreen(event.value, on_complete))
-
-class EditCellScreen(ModalScreen):
-    def __init__(self, cell_value: str, on_complete: Callable[[str], None]):
-        super().__init__()
-        self.cell_value = cell_value
-        self.on_complete = on_complete
-
-    def compose(self) -> ComposeResult:
-        yield Input(id="edit_cell_input")
-
-    def on_mount(self) -> None:
-        cell_input = self.query_one("#edit_cell_input", Input)
-        cell_input.value = str(self.cell_value)
-
-        cell_input.focus()
-
-    def on_click(self, event: Click) -> None:
-        clicked, _ = self.get_widget_at(event.screen_x, event.screen_y)
-        # Close the screen if the user clicks outside the modal content
-        # (i.e. the darkened background)
-        if clicked is self:
-            self.app.pop_screen()
-
-    def on_input_submitted(self, event: Input.Submitted):
-        self.on_complete(event.value)
-        self.app.pop_screen()
 
 
 if __name__ == "__main__":
