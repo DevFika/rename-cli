@@ -16,3 +16,4 @@ from .info_display import InfoDisplay
 from .file_table import FileTable, EditCellRequested
 from .columns import FileTableColumns
 from .edit_cell_screen import EditCellScreen
+from .command import process_names, CommandSuggester

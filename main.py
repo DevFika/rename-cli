@@ -4,24 +4,26 @@ from textual.screen import ModalScreen
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, DataTable, Placeholder, Input, Static, Label, TextArea
 from pathlib import Path
-from textual.events import Click
+from textual.events import Click, Focus, InputEvent
 from textual.coordinate import Coordinate
 from textual.geometry import Offset
 from textual.binding import Binding
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer, Grid
 from typing import Callable
-
-
+from textual.suggester import SuggestFromList
 from rich.text import Text
 
 from lib import DataManager, ToggleTree, InfoDisplay, FileTable, EditCellRequested
-from lib import FileTableColumns, EditCellScreen
+from lib import FileTableColumns, EditCellScreen, process_names, CommandSuggester
 
 class Namnbyte(App[None]):
     BINDINGS = [
         Binding("1", "focus_tree", "Focus on Tree View", show=True),
+        Binding("f1", "focus_tree", "Focus on Tree View", show=False),
         Binding("2", "focus_data_table", "Focus on Data Table", show=True),
+        Binding("f2", "focus_data_table", "Focus on Data Table", show=False),
         Binding("3", "focus_input", "Focus on Input Field", show=True),
+        Binding("f3", "focus_input", "Focus on Input Field", show=False),
         Binding("u", "test", "Focus on Input Field", show=True),
     ]
 
@@ -36,6 +38,7 @@ class Namnbyte(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
+        
 
         with Grid():
             with ScrollableContainer(id="left_panel"):
@@ -49,6 +52,7 @@ class Namnbyte(App[None]):
                 with Vertical(id="right_sub_panel"):
                     yield Label(id="output_display", expand=True)
                     self.input_field = Input(id="input_command")
+                    self.input_field.suggester = CommandSuggester()
                     yield self.input_field
 
     def on_mount(self) -> None:
@@ -70,6 +74,8 @@ class Namnbyte(App[None]):
         if "summary" in updated_data:
             self.info_display.refresh_display()
         if "batch_update_done" in updated_data:
+            self.data_table.populate_table()  # Refresh the file table after a batch update
+        if "name_processing_done" in updated_data:
             self.data_table.populate_table()  # Refresh the file table after a batch update
 
     def action_test(self) -> None:
@@ -118,6 +124,12 @@ class Namnbyte(App[None]):
             self.data_manager.set_file_name(folder_path, old_name, value)
 
         self.push_screen(EditCellScreen(event.value, on_complete))
+
+    @on(Input.Submitted, "#input_command")
+    def handle_input_command(self, event: Input.Submitted):
+        input_command = event.value
+        process_names(input_command, self.data_manager)
+        self.input_field.clear()
 
 
 if __name__ == "__main__":

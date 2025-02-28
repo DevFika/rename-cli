@@ -106,17 +106,32 @@ class DataManager:
 
     def set_file_name(self, folder_path: str, old_name: str, new_name: str) -> None:
         """Change the name of a file."""
-        print(self.data)
         folder_data = self.data["folders"].get(folder_path)
-        print(folder_data)
         if folder_data:
             file_data = next((f for f in folder_data["files"] if f["name"] == old_name), None)
-            print(file_data)
             if file_data:
                 file_data["new_name"] = new_name
                 self.notify_observers({"file": file_data, "old_name": old_name, "new_name": new_name})
                 self.recalculate_summary(updated_data={"file": file_data})
     
+    def process_file_names(self, process_file_name_callable: callable) -> None:
+        for folder_path, folder_data in self.data["folders"].items():
+            if not folder_data["is_enabled"]:
+                continue  # Skip disabled folders
+
+            for file_data in folder_data["files"]:
+                if not file_data.get("is_enabled", True):
+                    continue  # Skip disabled files
+
+                new_name = file_data.get("new_name")
+                abs_path = file_data.get("abs_path")
+                new_name = process_file_name_callable(new_name, abs_path)
+
+                file_data["new_name"] = new_name
+
+        self.notify_observers({"name_processing_done": True})
+        self.recalculate_summary()
+
     def update_folder_data(self, node: Any) -> None:
         """Toggle folder and file states based on node status."""
         folder_data = self.data["folders"].get(str(node.path))

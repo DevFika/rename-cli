@@ -46,6 +46,10 @@ Grid {
     background: black;
     height: 6;
 }
+#right_sub_panel.input-focused {
+    border: round blue; /* Change this to whatever color you want */
+    background: black;
+}
 
 #file_table {
     height: 1fr;
@@ -62,6 +66,9 @@ Grid {
 
 #input_command {
     height: 3;
+}
+#input_command:focus {
+    border: round blue; /* Change border color for the input command */
 }
 
 #dialog {
