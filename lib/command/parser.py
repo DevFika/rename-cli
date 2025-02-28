@@ -1,4 +1,5 @@
 import argparse
+from.rename_functions import *
 
 commands = {
     "replace": {
@@ -20,6 +21,114 @@ commands = {
         "args": []  # No arguments needed
     }
 }
+
+flags = ["ext"]
+
+class CommandHandler:
+    def __init__(self, input_command):
+        self.input_field = input_command
+        # self.input_field = type('InputField', (), {"value": ""})  # Mock input field for testing
+
+    def handle_input(self) -> None:
+        command_str = self.input_field.strip()
+        parts = command_str.split()
+
+        if not parts:
+            return
+
+        self.flags, cleaned_parts = self.preprocess_flags(parts)
+        print(f"flags {self.flags}")
+        print(f"cleaned_parts {cleaned_parts}")
+
+        commands_args = self.parse_commands(cleaned_parts)
+
+        for command, args in commands_args:
+            command_name = command.lstrip('-')  # Strip leading dash
+            if command_name not in commands:
+                print(f"Unknown command: {command_name}")
+                continue
+
+            command_info = commands[command_name]
+            expected_args = command_info["args"]
+
+            # Fill in missing optional arguments with their default values
+            filled_args = self.fill_arguments(args, expected_args)
+
+            # Execute the command with the filled arguments
+            self.execute_command(command_name, filled_args, self.flags)
+
+    def preprocess_flags(self, parts):
+        flags = []
+        cleaned_parts = []
+
+        for part in parts:
+            if part.startswith("--"):
+                flags.append(part.lstrip("-"))
+            else:
+                cleaned_parts.append(part)
+
+        return flags, cleaned_parts
+
+    def parse_commands(self, parts):
+        commands_args = []
+        current_command = None
+        current_args = []
+
+        for part in parts:
+            if part.startswith("-"):
+                if current_command:
+                    commands_args.append((current_command, current_args))
+                current_command = part
+                current_args = []
+            else:
+                current_args.append(part)
+
+        if current_command:
+            commands_args.append((current_command, current_args))
+
+        return commands_args
+
+    def fill_arguments(self, provided_args, expected_args):
+        """Fill provided arguments with defaults for optional arguments."""
+        filled_args = []
+
+        for index, arg_info in enumerate(expected_args):
+            if index < len(provided_args):
+                filled_args.append(provided_args[index])
+            elif not arg_info["required"]:
+                filled_args.append(arg_info.get("default", ""))
+            else:
+                print(f"Missing required argument: {arg_info['name']}")
+                filled_args.append(None)  # You could also raise an error here
+
+        return filled_args
+
+    def execute_command(self, command_name, args, flags):
+        if command_name == "replace":
+            self.replace(args[0], args[1])
+        elif command_name == "uppercase":
+            to_uppercase()
+        elif command_name == "lowercase":
+            self.lowercase()
+        elif command_name == "add_zeros":
+            self.add_zeros()
+        elif command_name == "remove_zeros":
+            self.remove_zeros()
+
+    def replace(self, old_text, new_text):
+        print(f"Replacing '{old_text}' with '{new_text}'")
+
+    def uppercase(self):
+        print("Uppercasing text")
+
+    def lowercase(self):
+        print("Lowercasing text")
+
+    def add_zeros(self):
+        print("Adding zeros")
+
+    def remove_zeros(self):
+        print("Removing zeros")
 
 def handle_input(self) -> None:
         """Event handler for handling multiple inputs on the line."""

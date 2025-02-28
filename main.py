@@ -14,7 +14,7 @@ from textual.suggester import SuggestFromList
 from rich.text import Text
 
 from lib import DataManager, ToggleTree, InfoDisplay, FileTable, EditCellRequested
-from lib import FileTableColumns, EditCellScreen, process_names, CommandSuggester
+from lib import FileTableColumns, EditCellScreen, process_names, CommandSuggester, CommandHandler
 
 class Namnbyte(App[None]):
     BINDINGS = [
@@ -128,7 +128,9 @@ class Namnbyte(App[None]):
     @on(Input.Submitted, "#input_command")
     def handle_input_command(self, event: Input.Submitted):
         input_command = event.value
-        process_names(input_command, self.data_manager)
+        command_handler = CommandHandler(input_command)
+        command_handler.handle_input()
+        # process_names(input_command, self.data_manager)
         self.input_field.clear()
 
 
