@@ -123,8 +123,8 @@ class DataManager:
         folder_data = self.data["folders"].get(str(node.path))
         if folder_data:
             folder_data["is_enabled"] = node.is_enabled
-            for file_data in folder_data["files"]:
-                file_data["is_enabled"] = node.is_enabled
+            # for file_data in folder_data["files"]:
+            #     file_data["is_enabled"] = node.is_enabled
             self.notify_observers({"folder": folder_data})
             self.recalculate_summary(updated_data={"folder": folder_data})
 

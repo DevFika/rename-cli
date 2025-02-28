@@ -13,4 +13,5 @@ from .remove import (
 from .data_manager import DataManager
 from .toggle_tree import ToggleTree
 from .info_display import InfoDisplay
-from .file_table import FileTable
+from .file_table import FileTable, EditCellRequested
+from .columns import FileTableColumns
