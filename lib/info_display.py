@@ -14,11 +14,15 @@ class InfoDisplay(Static):
         amount_of_files = self.data_manager.get_file_count()
         amount_of_enabled_files = self.data_manager.get_enabled_file_count()
 
+        undo_count = len(self.data_manager.undo_stack)
+        redo_count = len(self.data_manager.redo_stack)
+        pending_changes = self.data_manager.get_pending_changes_count()  # Get pending changes count
+
         self.update(
-            f"Folders:\n"
-            f"  Enabled: {amount_of_enabled_folders} / Total: {amount_of_folders}\n\n"
-            f"Files:\n"
-            f"  Enabled: {amount_of_enabled_files} / Total: {amount_of_files}"
+            f"[bold cyan]Folders:[/bold cyan] [green]Enabled: {amount_of_enabled_folders}[/green] / [yellow]{amount_of_folders}[/yellow]\n"
+            f"[bold cyan]Files:[/bold cyan] [green]Enabled: {amount_of_enabled_files}[/green] / [yellow]{amount_of_files}[/yellow]\n"
+            f"[red]Undo: {undo_count}[/red] | [blue]Redo: {redo_count}[/blue]\n"
+            f"[bold yellow]Pending Changes:[/bold yellow] {pending_changes} / [yellow]{amount_of_files}[/yellow]\n"  # Show pending changes count
         )
 
     def refresh_display(self):

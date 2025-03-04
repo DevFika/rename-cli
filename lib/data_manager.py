@@ -1,7 +1,10 @@
 # folder_data_manager.py
 from pathlib import Path
 from typing import Dict, List, Any
-from collections import defaultdict
+from collections import defaultdict, deque
+import re
+from .file_filter import FileFilter
+from copy import deepcopy
 
 ENABLED_FOLDER = f"[green]✅📂[/green]"
 DISABLED_FOLDER = f"[red]🔳📂[/red]"
@@ -21,7 +24,51 @@ class DataManager:
                 "total_size": 0,
             }
         }
+        self._undo_limit = 50
         self.batch_update_mode = False
+        self.undo_stack = deque()
+        self.redo_stack = deque()
+
+    def _clone_data(self):
+        """Clone current data structure for undo/redo."""
+        return deepcopy(self.data)
+        return {
+            "folders": {folder: folder_data.copy() for folder, folder_data in self.data["folders"].items()},
+            "summary": self.data["summary"].copy(),
+        }
+    # Undo/Redo
+    def _save_history(self, custom=None):
+        print("Im going to save history")
+        data_to_append = self._clone_data() if not custom else custom
+
+        if data_to_append is None:
+            return
+        
+        self.redo_stack.clear()
+        
+        self.undo_stack.append(data_to_append)
+        if len(self.undo_stack) > self._undo_limit:  # Limit the history size (adjust as needed)
+            self.undo_stack.popleft()
+    
+    def undo(self):
+        if not self.undo_stack:
+            print("No undo stack")
+            return
+        previous_state = self.undo_stack.pop()
+        self.redo_stack.append(self._clone_data())
+        self.data = previous_state
+        self.notify_observers({"undo_done": True})
+        self.recalculate_summary()
+
+    def redo(self):
+        """Redo the last undone change."""
+        if not self.redo_stack:
+            return  # Nothing to redo
+        next_state = self.redo_stack.pop()
+        self.undo_stack.append(self._clone_data())  # Save current state to undo stack
+        self.data = next_state  # Apply the next state
+        self.notify_observers({"redo_done": True})
+        self.recalculate_summary()  # Recalculate the summary after redo
 
     def add_observer(self, observer):
         self._observers.append(observer)
@@ -47,6 +94,15 @@ class DataManager:
 
 
     # --- Data Getters ---
+    def get_pending_changes_count(self) -> int:
+        """Return the count of files with pending name changes."""
+        pending_changes = 0
+        for folder in self.data["folders"].values():
+            for file in folder["files"]:
+                if file["new_name"] != file["current_name"]:
+                    pending_changes += 1
+        return pending_changes
+
     def get_folder_count(self) -> int:
         """Return the total folder count."""
         return len(self.data["folders"])
@@ -75,6 +131,8 @@ class DataManager:
         """Enable or disable a folder."""
         folder_data = self.data["folders"].get(folder_path)
         if folder_data:
+            self._save_history()
+
             folder_data["is_enabled"] = is_enabled
             # Update all files within the folder
             for file_data in folder_data["files"]:
@@ -89,10 +147,11 @@ class DataManager:
         if folder_data:
             file_data = next((f for f in folder_data["files"] if f["name"] == file_name), None)
             if file_data:
+                self._save_history()
+
                 file_data["is_enabled"] = not file_data["is_enabled"]
                 self.notify_observers({"file": file_data})
                 self.recalculate_summary(updated_data={"file": file_data})
-
 
     def set_file_enabled(self, folder_path: str, file_name: str, is_enabled: bool) -> None:
         """Enable or disable a specific file within a folder."""
@@ -100,6 +159,8 @@ class DataManager:
         if folder_data:
             file_data = next((f for f in folder_data["files"] if f["name"] == file_name), None)
             if file_data:
+                self._save_history()
+
                 file_data["is_enabled"] = is_enabled
                 self.notify_observers({"file": file_data})  # Notify observers
                 self.recalculate_summary(updated_data={"file": file_data})
@@ -110,11 +171,17 @@ class DataManager:
         if folder_data:
             file_data = next((f for f in folder_data["files"] if f["name"] == old_name), None)
             if file_data:
+                self._save_history()
+
                 file_data["new_name"] = new_name
                 self.notify_observers({"file": file_data, "old_name": old_name, "new_name": new_name})
                 self.recalculate_summary(updated_data={"file": file_data})
     
-    def process_file_names(self, process_file_name_callable: callable) -> None:
+    def process_file_names(self, process_file_name_callable: callable, filters: dict = None) -> None:
+        file_filter = FileFilter(filters)
+
+        initial_state = self._clone_data()
+        any_changes = False
         for folder_path, folder_data in self.data["folders"].items():
             if not folder_data["is_enabled"]:
                 continue  # Skip disabled folders
@@ -123,22 +190,29 @@ class DataManager:
                 if not file_data.get("is_enabled", True):
                     continue  # Skip disabled files
 
-                new_name = file_data.get("new_name")
                 abs_path = file_data.get("abs_path")
-                new_name = process_file_name_callable(new_name, abs_path)
+                file_name = file_data.get("new_name", "")
 
-                file_data["new_name"] = new_name
+                if not file_filter.filter(abs_path, file_name):
+                    continue  # Skip if the file doesn't pass the filter conditions
 
-        self.notify_observers({"name_processing_done": True})
-        self.recalculate_summary()
+                new_name = process_file_name_callable(file_name, abs_path)
+                if new_name != file_data["new_name"]:  # Only save history if the name is actually changed
+                    file_data["new_name"] = new_name
+                    any_changes = True  # Mark that we have made a change
+
+        if any_changes:
+            self._save_history(custom=initial_state)
+            self.notify_observers({"name_processing_done": True})
+            self.recalculate_summary()
 
     def update_folder_data(self, node: Any) -> None:
         """Toggle folder and file states based on node status."""
         folder_data = self.data["folders"].get(str(node.path))
         if folder_data:
+            self._save_history()
+
             folder_data["is_enabled"] = node.is_enabled
-            # for file_data in folder_data["files"]:
-            #     file_data["is_enabled"] = node.is_enabled
             self.notify_observers({"folder": folder_data})
             self.recalculate_summary(updated_data={"folder": folder_data})
 

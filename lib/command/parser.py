@@ -27,7 +27,6 @@ flags = ["ext"]
 class CommandHandler:
     def __init__(self, input_command):
         self.input_field = input_command
-        # self.input_field = type('InputField', (), {"value": ""})  # Mock input field for testing
 
     def handle_input(self) -> None:
         command_str = self.input_field.strip()
@@ -129,64 +128,6 @@ class CommandHandler:
 
     def remove_zeros(self):
         print("Removing zeros")
-
-def handle_input(self) -> None:
-        """Event handler for handling multiple inputs on the line."""
-        command_str = self.input_field.value.strip()
-
-        # Split the input by spaces to separate commands and arguments
-        parts = command_str.split()
-
-        if not parts:
-            return
-
-        # We need to parse the command input and handle each command with its arguments
-        commands_args = self.parse_commands(parts)
-
-        for command, args in commands_args:
-            if command not in commands:
-                print(f"Unknown command: {command}")
-                continue
-            
-            command_info = commands[command]
-            expected_args = command_info["args"]
-
-            # Ensure that we have the correct number of arguments
-            if len(args) < len(expected_args):
-                # If not enough arguments, fill with defaults
-                args.extend([arg["default"] for arg in expected_args[len(args):]])
-
-            # Now handle the command
-            if command == "replace":
-                if len(args) == 2:
-                    self.replace(args[0], args[1])
-            elif command == "uppercase":
-                self.uppercase()
-            elif command == "lowercase":
-                self.lowercase()
-            elif command == "add_zeros":
-                self.add_zeros()
-
-def parse_commands(self, parts):
-        """Parse the input parts into commands and arguments."""
-        commands_args = []
-        current_command = None
-        current_args = []
-
-        for part in parts:
-            if part.startswith("-"):  # If the part starts with '-', it's a command
-                if current_command:  # If there's a previous command, save it with its arguments
-                    commands_args.append((current_command, current_args))
-                current_command = part
-                current_args = []  # Reset arguments for the new command
-            else:
-                current_args.append(part)
-
-        # Don't forget to add the last command
-        if current_command:
-            commands_args.append((current_command, current_args))
-
-        return commands_args
 
 class ReplaceAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):

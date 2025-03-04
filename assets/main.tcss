@@ -12,10 +12,14 @@ Grid {
     height: 1;
 }
 
-#info_display {
+#info_display_panel {
     height: 20%;
     background: black;
     border: round yellow;
+}
+#info_display {
+    height: auto;
+    width: auto;
 }
 
 #info_display:focus {

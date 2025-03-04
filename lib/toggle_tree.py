@@ -120,3 +120,30 @@ class ToggleTree(Tree[bool]):
     def end_batch_update(self):
         """End the batch update and trigger final UI refresh."""
         self.data_manager.end_batch_update()
+
+    def refresh_nodes(self):
+        """Refresh node labels based on the current state of data in the data_manager."""
+        # First, sync the node states with the data from the DataManager
+        self._sync_node_states_with_data(self.root)
+        
+        # Then, update the labels for all nodes
+        self._refresh_node_labels(self.root)
+
+    def _sync_node_states_with_data(self, node):
+        """Sync node's enabled state with the data in the DataManager."""
+        # Check the node's path in the DataManager and update its enabled state
+        if str(node.path) in self.data_manager.data["folders"]:
+            folder_data = self.data_manager.data["folders"][str(node.path)]
+            node.is_enabled = folder_data.get("is_enabled", True)  # Default to True if not found
+
+        # Recursively sync all child nodes
+        for child in node.children:
+            self._sync_node_states_with_data(child)
+        
+    def _refresh_node_labels(self, node):
+        """Recursively refresh node labels."""
+        self.update_node_label(node)  # Update the label for the current node
+
+        # Recursively do the same for child nodes
+        for child in node.children:
+            self._refresh_node_labels(child)

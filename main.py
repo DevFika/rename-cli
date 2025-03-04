@@ -14,7 +14,7 @@ from textual.suggester import SuggestFromList
 from rich.text import Text
 
 from lib import DataManager, ToggleTree, InfoDisplay, FileTable, EditCellRequested
-from lib import FileTableColumns, EditCellScreen, process_names, CommandSuggester, CommandHandler
+from lib import FileTableColumns, EditCellScreen, process_names, CommandSuggester, CommandHandler, CommandPipelineHandler
 
 class Namnbyte(App[None]):
     BINDINGS = [
@@ -25,6 +25,8 @@ class Namnbyte(App[None]):
         Binding("3", "focus_input", "Focus on Input Field", show=True),
         Binding("f3", "focus_input", "Focus on Input Field", show=False),
         Binding("u", "test", "Focus on Input Field", show=True),
+        Binding("ctrl+z", "undo", "Undo Action", show=True),
+        Binding("ctrl+y", "redo", "Redo Action", show=True),
     ]
 
     CSS_PATH = "assets/main.tcss"
@@ -45,7 +47,8 @@ class Namnbyte(App[None]):
                 self.toggle_tree = ToggleTree(label="✅📂 Current Directory", id="tree_display", data_manager=self.data_manager, directory_path=self.current_directory)
                 yield self.toggle_tree
                 self.info_display = InfoDisplay(data_manager=self.data_manager, id="info_display", expand=True)
-                yield self.info_display
+                with ScrollableContainer(id="info_display_panel"):
+                    yield self.info_display
             with Vertical(id="right_panel"):
                 self.data_table = FileTable(data_manager=self.data_manager, id="file_table")
                 yield self.data_table
@@ -77,10 +80,25 @@ class Namnbyte(App[None]):
             self.data_table.populate_table()  # Refresh the file table after a batch update
         if "name_processing_done" in updated_data:
             self.data_table.populate_table()  # Refresh the file table after a batch update
+        if "undo_done" in updated_data:
+            self.data_table.populate_table()  # Refresh the file table after a batch update
+            self.toggle_tree.refresh_nodes()
+            print("Undo done")
+        if "redo_done" in updated_data:
+            self.data_table.populate_table()  # Refresh the file table after a batch update
+            self.toggle_tree.refresh_nodes()
+            print("Redo done")
 
     def action_test(self) -> None:
         print("Starting action test...")
         self.data_manager.set_file_name("test", "2", "pop")
+
+    def action_undo(self) -> None:
+        print("Lets undo")
+        self.data_manager.undo()
+
+    def action_redo(self) -> None:
+        self.data_manager.redo()
 
     def action_focus_tree(self) -> None:
         """Focus on the tree view panel."""
@@ -128,9 +146,9 @@ class Namnbyte(App[None]):
     @on(Input.Submitted, "#input_command")
     def handle_input_command(self, event: Input.Submitted):
         input_command = event.value
-        command_handler = CommandHandler(input_command)
-        command_handler.handle_input()
-        # process_names(input_command, self.data_manager)
+        command_pipeline_handler = CommandPipelineHandler(input_command, self.data_manager)
+        command_pipeline_handler.parse_and_prepare_pipeline()
+        command_pipeline_handler.process_file_names()
         self.input_field.clear()
 
 
